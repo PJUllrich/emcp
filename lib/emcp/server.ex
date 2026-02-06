@@ -30,6 +30,10 @@ defmodule EMCP.Server do
     end
   end
 
+  def handle_message(server, request) when is_map(request) do
+    handle_request(server, request)
+  end
+
   defp handle_request(server, %{"jsonrpc" => "2.0", "method" => method, "id" => id} = request) do
     case dispatch(server, method, request["params"]) do
       {:ok, result} -> success_response(id, result)

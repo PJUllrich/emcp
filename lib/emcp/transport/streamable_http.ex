@@ -105,7 +105,7 @@ defmodule EMCP.Transport.StreamableHTTP do
     do: Map.has_key?(request, "method") and not Map.has_key?(request, "id")
 
   defp handle_message(request) do
-    EMCP.Server.new() |> EMCP.Server.handle_message(JSON.encode!(request))
+    EMCP.Server.new() |> EMCP.Server.handle_message(request)
   end
 
   defp decode_json(body) do

@@ -48,6 +48,36 @@ defmodule EMCP.ServerTest do
     assert message == expected_message
   end
 
+  describe "handle_message/2 with pre-decoded map" do
+    test "accepts an already-decoded map", %{server: server} do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "ping"
+      }
+
+      response = EMCP.Server.handle_message(server, request)
+      assert %{"jsonrpc" => "2.0", "id" => 1, "result" => %{}} = response
+    end
+
+    test "dispatches tool calls from a map", %{server: server} do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "tools/call",
+        "params" => %{"name" => "echo", "arguments" => %{"message" => "hi"}}
+      }
+
+      response = EMCP.Server.handle_message(server, request)
+      assert %{"result" => %{"content" => [%{"text" => "hi"}]}} = response
+    end
+
+    test "returns error for invalid map request", %{server: server} do
+      response = EMCP.Server.handle_message(server, %{"bad" => "request"})
+      assert %{"error" => %{"code" => -32600}} = response
+    end
+  end
+
   describe "type validation: string" do
     test "rejects non-string value", %{server: server} do
       response = call_tool(server, "all_types", valid_args(%{"name" => 123}))

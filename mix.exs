@@ -1,7 +1,7 @@
 defmodule EMCP.MixProject do
   use Mix.Project
 
-  @version "0.1.2"
+  @version "0.1.3"
   @source_url "https://github.com/PJUllrich/emcp"
 
   def project do
@@ -13,7 +13,7 @@ defmodule EMCP.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       docs: docs(),
-      package: package(),
+      package: package()
     ]
   end
 
@@ -31,6 +31,7 @@ defmodule EMCP.MixProject do
   defp deps do
     [
       {:plug, "~> 1.16"},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:bandit, "~> 1.0", only: :test}
     ]
   end
