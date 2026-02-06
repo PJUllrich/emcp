@@ -8,6 +8,10 @@ defmodule EMCP.Transport.StreamableHTTPE2ETest do
       {Bandit, plug: EMCP.Transport.StreamableHTTP, port: port, startup_log: false}
     )
 
+    # Short keepalive so SSE loops exit quickly on shutdown
+    Application.put_env(:emcp, :keepalive_interval, 100)
+    on_exit(fn -> Application.delete_env(:emcp, :keepalive_interval) end)
+
     {:ok, port: port}
   end
 

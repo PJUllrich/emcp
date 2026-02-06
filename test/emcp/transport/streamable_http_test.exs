@@ -217,6 +217,70 @@ defmodule EMCP.Transport.StreamableHTTPTest do
     end
   end
 
+  describe "GET (SSE validation)" do
+    test "returns 406 without Accept: text/event-stream" do
+      conn =
+        conn(:get, "/mcp")
+        |> put_req_header("accept", "application/json")
+        |> put_req_header("mcp-session-id", "some-id")
+        |> call()
+
+      assert conn.status == 406
+      body = JSON.decode!(conn.resp_body)
+      assert body["error"] == "Accept header must include text/event-stream"
+    end
+
+    test "returns 400 without session ID" do
+      conn =
+        conn(:get, "/mcp")
+        |> put_req_header("accept", "text/event-stream")
+        |> call()
+
+      assert conn.status == 400
+      body = JSON.decode!(conn.resp_body)
+      assert body["error"] == "Missing session ID"
+    end
+
+    test "returns 404 for invalid session ID" do
+      conn =
+        conn(:get, "/mcp")
+        |> put_req_header("accept", "text/event-stream")
+        |> put_req_header("mcp-session-id", "bogus")
+        |> call()
+
+      assert conn.status == 404
+      body = JSON.decode!(conn.resp_body)
+      assert body["error"] == "Session not found"
+    end
+
+    test "registers SSE pid for valid session" do
+      {_conn, session_id} = init_session()
+
+      test_pid = self()
+
+      pid =
+        spawn(fn ->
+          conn =
+            conn(:get, "/mcp")
+            |> put_req_header("accept", "text/event-stream")
+            |> put_req_header("mcp-session-id", session_id)
+
+          send(test_pid, :sse_started)
+          call(conn)
+        end)
+
+      assert_receive :sse_started, 1000
+      Process.sleep(50)
+
+      assert EMCP.SessionStore.get_sse_pid(session_id) == pid
+
+      send(pid, :close_sse)
+      Process.sleep(50)
+
+      assert EMCP.SessionStore.get_sse_pid(session_id) == nil
+    end
+  end
+
   describe "unsupported methods" do
     test "returns 405 for PUT" do
       conn = conn(:put, "/mcp") |> call()

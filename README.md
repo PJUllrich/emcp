@@ -4,7 +4,6 @@ An minimal Elixir MCP (Model Context Protocol) server.
 
 ## Limitations (for now)
 
-- **No SSE support.** The StreamableHTTP transport does not support Server-Sent Events (GET requests). This means the server cannot push notifications to clients, such as `notifications/tools/list_changed`, `notifications/resources/list_changed`, or `notifications/prompts/list_changed`. In practice, this only matters if you dynamically register or remove tools at runtime. For servers with a fixed set of tools, this has no impact.
 - **No resources or prompts.** Only tools are supported.
 
 ## Usage
@@ -64,10 +63,12 @@ config :emcp,
 
 ### 3. Mount the transport
 
-Add the StreamableHTTP transport to your Phoenix router:
+Add the StreamableHTTP transport to your Phoenix router. Mount it outside any pipeline since EMCP handles content negotiation itself:
 
 ```elixir
-forward "/mcp", EMCP.Transport.StreamableHTTP
+scope "/mcp" do
+  forward "/", EMCP.Transport.StreamableHTTP
+end
 ```
 
 Sessions are managed automatically with a configurable TTL (default 60 minutes):
