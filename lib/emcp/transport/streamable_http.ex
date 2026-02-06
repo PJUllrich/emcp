@@ -20,15 +20,34 @@ defmodule EMCP.Transport.StreamableHTTP do
   # POST
 
   defp handle_post(conn) do
+    case read_request(conn) do
+      {:ok, request, conn} ->
+        if initialize?(request) do
+          initialize_session(conn, request)
+        else
+          with_session(conn, fn -> dispatch(conn, request) end)
+        end
+
+      {:error, message} ->
+        json_error(conn, 400, message)
+    end
+  end
+
+  defp read_request(%{body_params: %Plug.Conn.Unfetched{}} = conn) do
     with {:ok, body, conn} <- read_body(conn),
          {:ok, request} <- decode_json(body) do
-      if initialize?(request) do
-        initialize_session(conn, request)
-      else
-        with_session(conn, fn -> dispatch(conn, request) end)
-      end
-    else
-      {:error, message} -> json_error(conn, 400, message)
+      {:ok, request, conn}
+    end
+  end
+
+  defp read_request(%{body_params: params} = conn) when is_map(params) and params != %{} do
+    {:ok, params, conn}
+  end
+
+  defp read_request(conn) do
+    with {:ok, body, conn} <- read_body(conn),
+         {:ok, request} <- decode_json(body) do
+      {:ok, request, conn}
     end
   end
 

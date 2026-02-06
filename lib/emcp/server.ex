@@ -1,6 +1,8 @@
 defmodule EMCP.Server do
   @moduledoc "MCP server that handles JSON-RPC requests and dispatches to registered tools."
 
+  require Logger
+
   @protocol_version "2025-03-26"
 
   @parse_error -32700
@@ -25,8 +27,12 @@ defmodule EMCP.Server do
 
   def handle_message(server, raw) when is_binary(raw) do
     case JSON.decode(raw) do
-      {:ok, request} -> handle_request(server, request)
-      {:error, _} -> error_response(nil, @parse_error, "Parse error")
+      {:ok, request} ->
+        handle_request(server, request)
+
+      {:error, _} ->
+        Logger.error("Failed to parse JSON request")
+        error_response(nil, @parse_error, "Parse error")
     end
   end
 
@@ -35,18 +41,28 @@ defmodule EMCP.Server do
   end
 
   defp handle_request(server, %{"jsonrpc" => "2.0", "method" => method, "id" => id} = request) do
+    Logger.debug("Received request method=#{method} id=#{id}")
+
     case dispatch(server, method, request["params"]) do
-      {:ok, result} -> success_response(id, result)
-      {:error, code, message} -> error_response(id, code, message)
+      {:ok, result} ->
+        response = success_response(id, result)
+        Logger.debug("Sending response method=#{method} id=#{id}")
+        response
+
+      {:error, code, message} ->
+        Logger.error("Request failed method=#{method} id=#{id} code=#{code} message=#{message}")
+        error_response(id, code, message)
     end
   end
 
   # Notifications — no id, no response
-  defp handle_request(_server, %{"jsonrpc" => "2.0", "method" => _method}) do
+  defp handle_request(_server, %{"jsonrpc" => "2.0", "method" => method}) do
+    Logger.debug("Received notification method=#{method}")
     nil
   end
 
   defp handle_request(_server, _invalid) do
+    Logger.error("Received invalid request")
     error_response(nil, @invalid_request, "Invalid Request")
   end
 
