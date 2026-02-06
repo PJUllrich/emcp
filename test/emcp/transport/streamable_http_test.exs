@@ -199,8 +199,11 @@ defmodule EMCP.Transport.StreamableHTTPTest do
       {_init_conn, session_id} = init_session()
 
       # Backdate the session timestamp to make it expired
-      table = EMCP.Transport.StreamableHTTP.Sessions
-      :ets.update_element(table, session_id, {2, System.monotonic_time(:millisecond) - 700_000})
+      :ets.update_element(
+        EMCP.SessionStore,
+        session_id,
+        {2, System.monotonic_time(:millisecond) - 700_000}
+      )
 
       conn =
         post_json("/mcp", %{jsonrpc: "2.0", method: "ping", id: "1"},

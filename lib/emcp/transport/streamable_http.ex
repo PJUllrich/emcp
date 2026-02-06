@@ -53,7 +53,7 @@ defmodule EMCP.Transport.StreamableHTTP do
 
   defp initialize_session(conn, request) do
     session_id = generate_session_id()
-    store_session(session_id)
+    EMCP.SessionStore.store(session_id)
 
     conn
     |> put_resp_header("mcp-session-id", session_id)
@@ -72,7 +72,7 @@ defmodule EMCP.Transport.StreamableHTTP do
 
   defp handle_delete(conn) do
     with_session(conn, fn session_id ->
-      delete_session(session_id)
+      EMCP.SessionStore.delete(session_id)
       json_response(conn, 200, %{"success" => true})
     end)
   end
@@ -99,7 +99,7 @@ defmodule EMCP.Transport.StreamableHTTP do
   end
 
   defp validate_session(session_id) do
-    case lookup_session(session_id) do
+    case EMCP.SessionStore.lookup(session_id) do
       nil ->
         {:error, 404, "Session not found"}
 
@@ -107,10 +107,10 @@ defmodule EMCP.Transport.StreamableHTTP do
         session_expired? = System.monotonic_time(:millisecond) - last_active > session_ttl()
 
         if session_expired? do
-          delete_session(session_id)
+          EMCP.SessionStore.delete(session_id)
           {:error, 404, "Session not found"}
         else
-          touch_session(session_id)
+          EMCP.SessionStore.touch(session_id)
           :ok
         end
     end
@@ -144,41 +144,10 @@ defmodule EMCP.Transport.StreamableHTTP do
     json_response(conn, status, %{"error" => message})
   end
 
-  # Session storage (ETS)
-
-  @table __MODULE__.Sessions
-
-  defp ensure_table do
-    if :ets.whereis(@table) == :undefined do
-      :ets.new(@table, [:set, :public, :named_table])
-    end
-  end
+  # Session helpers
 
   defp generate_session_id do
     Base.encode16(:crypto.strong_rand_bytes(16), case: :lower)
-  end
-
-  defp store_session(session_id) do
-    ensure_table()
-    :ets.insert(@table, {session_id, System.monotonic_time(:millisecond)})
-  end
-
-  defp lookup_session(session_id) do
-    ensure_table()
-
-    case :ets.lookup(@table, session_id) do
-      [{^session_id, last_active}] -> last_active
-      [] -> nil
-    end
-  end
-
-  defp touch_session(session_id) do
-    :ets.update_element(@table, session_id, {2, System.monotonic_time(:millisecond)})
-  end
-
-  defp delete_session(session_id) do
-    ensure_table()
-    :ets.delete(@table, session_id)
   end
 
   defp session_ttl do
