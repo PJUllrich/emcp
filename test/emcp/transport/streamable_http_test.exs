@@ -124,6 +124,44 @@ defmodule EMCP.Transport.StreamableHTTPTest do
     end
   end
 
+  describe "pre-parsed body (Phoenix Plug.Parsers)" do
+    test "handles initialize when body is already parsed" do
+      params = %{"jsonrpc" => "2.0", "method" => "initialize", "id" => "init"}
+
+      conn =
+        conn(:post, "/mcp", "")
+        |> put_req_header("content-type", "application/json")
+        |> Map.put(:body_params, params)
+        |> call()
+
+      assert conn.status == 200
+      session_id = get_resp_header(conn, "mcp-session-id") |> List.first()
+      assert session_id != nil
+
+      body = JSON.decode!(conn.resp_body)
+      assert body["result"]["protocolVersion"]
+    end
+
+    test "handles requests when body is already parsed" do
+      # Initialize a session first (using raw body path)
+      {_init_conn, session_id} = init_session()
+
+      params = %{"jsonrpc" => "2.0", "method" => "ping", "id" => "1"}
+
+      conn =
+        conn(:post, "/mcp", "")
+        |> put_req_header("content-type", "application/json")
+        |> put_req_header("mcp-session-id", session_id)
+        |> Map.put(:body_params, params)
+        |> call()
+
+      assert conn.status == 200
+      body = JSON.decode!(conn.resp_body)
+      assert body["id"] == "1"
+      assert body["result"] == %{}
+    end
+  end
+
   describe "DELETE" do
     test "deletes a session" do
       {_init_conn, session_id} = init_session()
