@@ -172,7 +172,6 @@ defmodule EMCP.Transport.StreamableHTTP do
 
       {last_active, _sse_pid} ->
         if System.monotonic_time(:millisecond) - last_active > session_ttl() do
-          EMCP.SessionStore.delete(session_id)
           EMCP.SessionStore.store(session_id)
         else
           EMCP.SessionStore.touch(session_id)
