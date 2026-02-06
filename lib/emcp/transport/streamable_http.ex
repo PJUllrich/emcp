@@ -74,7 +74,7 @@ defmodule EMCP.Transport.StreamableHTTP do
   defp sse_loop(conn, session_id, event_id) do
     receive do
       {:sse_message, data} ->
-        case chunk(conn, EMCP.SSEEvent.encode(data, event_id)) do
+        case chunk(conn, sse_encode(data, event_id)) do
           {:ok, conn} -> sse_loop(conn, session_id, event_id + 1)
           {:error, _} -> conn
         end
@@ -83,7 +83,7 @@ defmodule EMCP.Transport.StreamableHTTP do
         conn
     after
       keepalive_interval() ->
-        case chunk(conn, EMCP.SSEEvent.keepalive()) do
+        case chunk(conn, sse_keepalive()) do
           {:ok, conn} -> sse_loop(conn, session_id, event_id)
           {:error, _} -> conn
         end
@@ -167,18 +167,18 @@ defmodule EMCP.Transport.StreamableHTTP do
   defp validate_session(session_id) do
     case EMCP.SessionStore.lookup(session_id) do
       nil ->
-        {:error, 404, "Session not found"}
+        EMCP.SessionStore.store(session_id)
+        :ok
 
       {last_active, _sse_pid} ->
-        session_expired? = System.monotonic_time(:millisecond) - last_active > session_ttl()
-
-        if session_expired? do
+        if System.monotonic_time(:millisecond) - last_active > session_ttl() do
           EMCP.SessionStore.delete(session_id)
-          {:error, 404, "Session not found"}
+          EMCP.SessionStore.store(session_id)
         else
           EMCP.SessionStore.touch(session_id)
-          :ok
         end
+
+        :ok
     end
   end
 
@@ -221,6 +221,11 @@ defmodule EMCP.Transport.StreamableHTTP do
     |> List.first("")
     |> String.contains?("text/event-stream")
   end
+
+  # SSE helpers
+
+  defp sse_encode(data, id), do: "id: #{id}\nevent: message\ndata: #{data}\n\n"
+  defp sse_keepalive(), do: ": keepalive\n\n"
 
   # Response helpers
 

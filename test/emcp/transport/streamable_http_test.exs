@@ -67,14 +67,14 @@ defmodule EMCP.Transport.StreamableHTTPTest do
       assert body["error"] == "Missing session ID"
     end
 
-    test "returns 404 for invalid session ID" do
+    test "re-creates unknown session ID transparently" do
       conn =
         post_json("/mcp", %{jsonrpc: "2.0", method: "ping", id: "1"}, "mcp-session-id": "bogus")
         |> call()
 
-      assert conn.status == 404
+      assert conn.status == 200
       body = JSON.decode!(conn.resp_body)
-      assert body["error"] == "Session not found"
+      assert body["result"] == %{}
     end
 
     test "returns 400 for invalid JSON" do
@@ -175,14 +175,14 @@ defmodule EMCP.Transport.StreamableHTTPTest do
       body = JSON.decode!(conn.resp_body)
       assert body["success"] == true
 
-      # Session is gone now
+      # Session is re-created transparently
       conn =
         post_json("/mcp", %{jsonrpc: "2.0", method: "ping", id: "1"},
           "mcp-session-id": session_id
         )
         |> call()
 
-      assert conn.status == 404
+      assert conn.status == 200
     end
 
     test "returns 400 for missing session ID" do
@@ -195,7 +195,7 @@ defmodule EMCP.Transport.StreamableHTTPTest do
   end
 
   describe "session expiry" do
-    test "returns 404 for expired session" do
+    test "re-creates expired session transparently" do
       {_init_conn, session_id} = init_session()
 
       # Backdate the session timestamp to make it expired
@@ -211,9 +211,9 @@ defmodule EMCP.Transport.StreamableHTTPTest do
         )
         |> call()
 
-      assert conn.status == 404
+      assert conn.status == 200
       body = JSON.decode!(conn.resp_body)
-      assert body["error"] == "Session not found"
+      assert body["result"] == %{}
     end
   end
 
@@ -241,16 +241,29 @@ defmodule EMCP.Transport.StreamableHTTPTest do
       assert body["error"] == "Missing session ID"
     end
 
-    test "returns 404 for invalid session ID" do
-      conn =
-        conn(:get, "/mcp")
-        |> put_req_header("accept", "text/event-stream")
-        |> put_req_header("mcp-session-id", "bogus")
-        |> call()
+    test "re-creates unknown session and registers SSE pid" do
+      test_pid = self()
 
-      assert conn.status == 404
-      body = JSON.decode!(conn.resp_body)
-      assert body["error"] == "Session not found"
+      pid =
+        spawn(fn ->
+          conn =
+            conn(:get, "/mcp")
+            |> put_req_header("accept", "text/event-stream")
+            |> put_req_header("mcp-session-id", "bogus-sse")
+
+          send(test_pid, :sse_started)
+          call(conn)
+        end)
+
+      assert_receive :sse_started, 1000
+      Process.sleep(50)
+
+      assert EMCP.SessionStore.get_sse_pid("bogus-sse") == pid
+
+      send(pid, :close_sse)
+      Process.sleep(50)
+
+      assert EMCP.SessionStore.get_sse_pid("bogus-sse") == nil
     end
 
     test "registers SSE pid for valid session" do
