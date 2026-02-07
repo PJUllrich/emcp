@@ -2,10 +2,6 @@
 
 An minimal Elixir MCP (Model Context Protocol) server.
 
-## Limitations (for now)
-
-- **No resources.** Only tools and prompts are supported.
-
 ## Usage
 
 ### 1. Define a tool
@@ -58,7 +54,10 @@ end
 config :emcp,
   name: "my-app",
   version: "1.0.0",
-  tools: [MyApp.Tools.Echo]
+  tools: [MyApp.Tools.Echo],
+  prompts: [MyApp.Prompts.CodeReview],
+  resources: [MyApp.Resources.Readme],
+  resource_templates: [MyApp.ResourceTemplates.UserProfile]
 ```
 
 ### 3. Mount the transport
@@ -150,6 +149,78 @@ end
 config :emcp,
   prompts: [MyApp.Prompts.CodeReview]
 ```
+
+## Resources
+
+Resources expose data that clients can read. A static resource has a fixed URI:
+
+```elixir
+defmodule MyApp.Resources.Readme do
+  @behaviour EMCP.Resource
+
+  @impl EMCP.Resource
+  def uri, do: "file:///project/readme"
+
+  @impl EMCP.Resource
+  def name, do: "readme"
+
+  @impl EMCP.Resource
+  def description, do: "The project README"
+
+  @impl EMCP.Resource
+  def mime_type, do: "text/plain"
+
+  @impl EMCP.Resource
+  def read do
+    [%{"uri" => uri(), "mimeType" => mime_type(), "text" => File.read!("README.md")}]
+  end
+end
+```
+
+Resource templates use URI patterns so clients can request dynamic content:
+
+```elixir
+defmodule MyApp.ResourceTemplates.UserProfile do
+  @behaviour EMCP.ResourceTemplate
+
+  @impl EMCP.ResourceTemplate
+  def uri_template, do: "db:///users/{user_id}/profile"
+
+  @impl EMCP.ResourceTemplate
+  def name, do: "user_profile"
+
+  @impl EMCP.ResourceTemplate
+  def description, do: "A user profile by ID"
+
+  @impl EMCP.ResourceTemplate
+  def mime_type, do: "application/json"
+
+  @impl EMCP.ResourceTemplate
+  def read("db:///users/" <> rest) do
+    case String.split(rest, "/") do
+      [user_id, "profile"] ->
+        user = MyApp.Repo.get!(MyApp.User, user_id)
+        {:ok, [%{"uri" => "db:///users/#{user_id}/profile", "mimeType" => mime_type(), "text" => JSON.encode!(user)}]}
+
+      _ ->
+        {:error, "Resource not found"}
+    end
+  end
+
+  def read(_uri), do: {:error, "Resource not found"}
+end
+```
+
+Register both in your config:
+
+```elixir
+# config/config.exs
+config :emcp,
+  resources: [MyApp.Resources.Readme],
+  resource_templates: [MyApp.ResourceTemplates.UserProfile]
+```
+
+When a client calls `resources/read`, the server first tries an exact URI match against static resources. If none match, it tries each resource template in order until one handles the URI.
 
 ## Acknowledgements
 
