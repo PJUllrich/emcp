@@ -10,7 +10,7 @@ defmodule EMCP.Server do
   @method_not_found -32601
   @invalid_params -32602
 
-  defstruct [:name, :version, :tools, :prompts]
+  defstruct [:name, :version, :tools, :prompts, :resources, :resource_templates]
 
   def new do
     tools =
@@ -23,11 +23,21 @@ defmodule EMCP.Server do
       |> Application.get_env(:prompts, [])
       |> Map.new(fn mod -> {mod.name(), mod} end)
 
+    resources =
+      :emcp
+      |> Application.get_env(:resources, [])
+      |> Map.new(fn mod -> {mod.uri(), mod} end)
+
+    resource_templates =
+      Application.get_env(:emcp, :resource_templates, [])
+
     %__MODULE__{
       name: Application.get_env(:emcp, :name, "emcp"),
       version: Application.get_env(:emcp, :version, "0.1.0"),
       tools: tools,
-      prompts: prompts
+      prompts: prompts,
+      resources: resources,
+      resource_templates: resource_templates
     }
   end
 
@@ -78,7 +88,8 @@ defmodule EMCP.Server do
        "protocolVersion" => @protocol_version,
        "capabilities" => %{
          "tools" => %{"listChanged" => true},
-         "prompts" => %{"listChanged" => true}
+         "prompts" => %{"listChanged" => true},
+         "resources" => %{"listChanged" => true}
        },
        "serverInfo" => %{
          "name" => server.name,
@@ -137,8 +148,39 @@ defmodule EMCP.Server do
     end
   end
 
+  defp dispatch(server, "resources/list", _params) do
+    resources = server.resources |> Map.values() |> Enum.map(&EMCP.Resource.to_map/1)
+    {:ok, %{"resources" => resources}}
+  end
+
+  defp dispatch(server, "resources/read", %{"uri" => uri}) do
+    case Map.fetch(server.resources, uri) do
+      {:ok, module} ->
+        {:ok, %{"contents" => module.read()}}
+
+      :error ->
+        try_resource_templates(server.resource_templates, uri)
+    end
+  end
+
+  defp dispatch(server, "resources/templates/list", _params) do
+    templates = server.resource_templates |> Enum.map(&EMCP.ResourceTemplate.to_map/1)
+    {:ok, %{"resourceTemplates" => templates}}
+  end
+
   defp dispatch(_server, method, _params) do
     {:error, @method_not_found, "Method not found: #{method}"}
+  end
+
+  defp try_resource_templates([], uri) do
+    {:error, @invalid_params, "Resource not found: #{uri}"}
+  end
+
+  defp try_resource_templates([template | rest], uri) do
+    case template.read(uri) do
+      {:ok, contents} -> {:ok, %{"contents" => contents}}
+      {:error, _} -> try_resource_templates(rest, uri)
+    end
   end
 
   defp success_response(id, result) do

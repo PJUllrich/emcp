@@ -161,4 +161,87 @@ defmodule EMCP.Transport.StreamableHTTPE2ETest do
       assert output =~ "Missing required argument: code"
     end
   end
+
+  describe "resources/list" do
+    test "returns registered resources", %{port: port} do
+      {output, 0} = inspect_http(port, ["--method", "resources/list"])
+      result = JSON.decode!(output)
+
+      assert %{"resources" => resources} = result
+      assert length(resources) == 1
+
+      [resource] = resources
+      assert resource["uri"] == "file:///test/hello.txt"
+      assert resource["name"] == "test_file"
+      assert resource["description"] == "A test text file resource"
+      assert resource["mimeType"] == "text/plain"
+    end
+  end
+
+  describe "resources/read" do
+    test "reads a resource by URI", %{port: port} do
+      {output, 0} =
+        inspect_http(port, [
+          "--method",
+          "resources/read",
+          "--uri",
+          "file:///test/hello.txt"
+        ])
+
+      result = JSON.decode!(output)
+
+      assert %{"contents" => [content]} = result
+      assert content["uri"] == "file:///test/hello.txt"
+      assert content["mimeType"] == "text/plain"
+      assert content["text"] == "Hello from resource!"
+    end
+
+    test "reads a resource via template match", %{port: port} do
+      {output, 0} =
+        inspect_http(port, [
+          "--method",
+          "resources/read",
+          "--uri",
+          "file:///users/42/profile"
+        ])
+
+      result = JSON.decode!(output)
+
+      assert %{"contents" => [content]} = result
+      assert content["uri"] == "file:///users/42/profile"
+      assert content["mimeType"] == "application/json"
+
+      data = JSON.decode!(content["text"])
+      assert data["user_id"] == "42"
+      assert data["name"] == "User 42"
+    end
+
+    test "returns error for unknown resource URI", %{port: port} do
+      {output, 1} =
+        inspect_http(port, [
+          "--method",
+          "resources/read",
+          "--uri",
+          "file:///nonexistent"
+        ])
+
+      assert output =~ "Resource not found"
+    end
+  end
+
+  describe "resources/templates/list" do
+    test "returns registered resource templates", %{port: port} do
+      {output, 0} = inspect_http(port, ["--method", "resources/templates/list"])
+      result = JSON.decode!(output)
+
+      assert %{"resourceTemplates" => templates} = result
+      assert length(templates) == 1
+
+      [template] = templates
+      assert template["uriTemplate"] == "file:///users/{user_id}/profile"
+      assert template["name"] == "user_profile"
+      assert template["description"] == "A user profile resource template"
+      assert template["mimeType"] == "application/json"
+    end
+  end
 end
