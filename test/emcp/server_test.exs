@@ -321,4 +321,116 @@ defmodule EMCP.ServerTest do
       "nested" => %{"inner" => "deep"}
     }
   end
+
+  # -- Prompt helpers --
+
+  defp list_prompts(server) do
+    request = %{
+      "jsonrpc" => "2.0",
+      "id" => 1,
+      "method" => "prompts/list",
+      "params" => %{}
+    }
+
+    EMCP.Server.handle_message(server, JSON.encode!(request))
+  end
+
+  defp get_prompt(server, name, args \\ %{}) do
+    request = %{
+      "jsonrpc" => "2.0",
+      "id" => 1,
+      "method" => "prompts/get",
+      "params" => %{"name" => name, "arguments" => args}
+    }
+
+    EMCP.Server.handle_message(server, JSON.encode!(request))
+  end
+
+  describe "prompts/list" do
+    test "returns all registered prompts", %{server: server} do
+      response = list_prompts(server)
+      assert %{"result" => %{"prompts" => prompts}} = response
+      assert length(prompts) == 2
+
+      names = Enum.map(prompts, & &1["name"]) |> Enum.sort()
+      assert names == ["code_review", "simple_greeting"]
+    end
+
+    test "includes prompt metadata", %{server: server} do
+      response = list_prompts(server)
+      %{"result" => %{"prompts" => prompts}} = response
+
+      greeting = Enum.find(prompts, &(&1["name"] == "simple_greeting"))
+      assert greeting["description"] == "A simple greeting prompt"
+      assert greeting["arguments"] == []
+
+      review = Enum.find(prompts, &(&1["name"] == "code_review"))
+      assert review["description"] == "Reviews code with optional focus area"
+      assert length(review["arguments"]) == 2
+
+      code_arg = Enum.find(review["arguments"], &(&1["name"] == "code"))
+      assert code_arg["description"] == "The code to review"
+      assert code_arg["required"] == true
+
+      focus_arg = Enum.find(review["arguments"], &(&1["name"] == "focus"))
+      assert focus_arg["description"] == "Optional area to focus on"
+      refute Map.has_key?(focus_arg, "required")
+    end
+  end
+
+  describe "prompts/get" do
+    test "returns messages for a prompt without arguments", %{server: server} do
+      response = get_prompt(server, "simple_greeting")
+      assert %{"result" => %{"messages" => messages}} = response
+      assert length(messages) == 1
+
+      assert [%{"role" => "user", "content" => %{"type" => "text", "text" => "Say hello!"}}] =
+               messages
+    end
+
+    test "returns messages for a prompt with arguments", %{server: server} do
+      response = get_prompt(server, "code_review", %{"code" => "def foo, do: :bar"})
+      assert %{"result" => result} = response
+      assert result["description"] == "Code review prompt"
+      assert length(result["messages"]) == 2
+
+      [user_msg, assistant_msg] = result["messages"]
+      assert user_msg["role"] == "user"
+      assert user_msg["content"]["text"] =~ "def foo, do: :bar"
+      assert assistant_msg["role"] == "assistant"
+    end
+
+    test "passes optional arguments through", %{server: server} do
+      response = get_prompt(server, "code_review", %{"code" => "x = 1", "focus" => "security"})
+      assert %{"result" => %{"messages" => [user_msg | _]}} = response
+      assert user_msg["content"]["text"] =~ "focusing on security"
+    end
+
+    test "returns error for missing required argument", %{server: server} do
+      response = get_prompt(server, "code_review", %{})
+      assert %{"error" => %{"code" => -32602, "message" => message}} = response
+      assert message == "Missing required argument: code"
+    end
+
+    test "returns error for unknown prompt", %{server: server} do
+      response = get_prompt(server, "nonexistent")
+      assert %{"error" => %{"code" => -32602, "message" => message}} = response
+      assert message == "Prompt not found: nonexistent"
+    end
+  end
+
+  describe "initialize capabilities include prompts" do
+    test "reports prompts capability", %{server: server} do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "initialize",
+        "params" => %{}
+      }
+
+      response = EMCP.Server.handle_message(server, request)
+      assert %{"result" => %{"capabilities" => capabilities}} = response
+      assert capabilities["prompts"] == %{"listChanged" => true}
+    end
+  end
 end

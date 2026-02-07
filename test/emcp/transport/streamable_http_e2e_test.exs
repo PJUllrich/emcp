@@ -96,4 +96,69 @@ defmodule EMCP.Transport.StreamableHTTPE2ETest do
       assert output =~ "Expected type string but got integer"
     end
   end
+
+  describe "prompts/list" do
+    test "returns registered prompts", %{port: port} do
+      {output, 0} = inspect_http(port, ["--method", "prompts/list"])
+      result = JSON.decode!(output)
+
+      assert %{"prompts" => prompts} = result
+      assert length(prompts) == 2
+
+      names = Enum.map(prompts, & &1["name"])
+      assert "simple_greeting" in names
+      assert "code_review" in names
+    end
+  end
+
+  describe "prompts/get" do
+    test "gets a prompt without arguments", %{port: port} do
+      {output, 0} =
+        inspect_http(port, [
+          "--method",
+          "prompts/get",
+          "--prompt-name",
+          "simple_greeting"
+        ])
+
+      result = JSON.decode!(output)
+      assert %{"messages" => [%{"role" => "user", "content" => %{"type" => "text"}}]} = result
+    end
+
+    test "gets a prompt with arguments", %{port: port} do
+      {output, 0} =
+        inspect_http(port, [
+          "--method",
+          "prompts/get",
+          "--prompt-name",
+          "code_review",
+          "--prompt-args",
+          "code=def foo, do: :bar",
+          "--prompt-args",
+          "focus=security"
+        ])
+
+      result = JSON.decode!(output)
+      assert %{"description" => "Code review prompt", "messages" => messages} = result
+      assert length(messages) == 2
+
+      [user_msg, assistant_msg] = messages
+      assert user_msg["role"] == "user"
+      assert user_msg["content"]["text"] =~ "focusing on security"
+      assert user_msg["content"]["text"] =~ "def foo, do: :bar"
+      assert assistant_msg["role"] == "assistant"
+    end
+
+    test "returns error for missing required argument", %{port: port} do
+      {output, 1} =
+        inspect_http(port, [
+          "--method",
+          "prompts/get",
+          "--prompt-name",
+          "code_review"
+        ])
+
+      assert output =~ "Missing required argument: code"
+    end
+  end
 end

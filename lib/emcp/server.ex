@@ -10,7 +10,7 @@ defmodule EMCP.Server do
   @method_not_found -32601
   @invalid_params -32602
 
-  defstruct [:name, :version, :tools]
+  defstruct [:name, :version, :tools, :prompts]
 
   def new do
     tools =
@@ -18,10 +18,16 @@ defmodule EMCP.Server do
       |> Application.get_env(:tools, [])
       |> Map.new(fn mod -> {mod.name(), mod} end)
 
+    prompts =
+      :emcp
+      |> Application.get_env(:prompts, [])
+      |> Map.new(fn mod -> {mod.name(), mod} end)
+
     %__MODULE__{
       name: Application.get_env(:emcp, :name, "emcp"),
       version: Application.get_env(:emcp, :version, "0.1.0"),
-      tools: tools
+      tools: tools,
+      prompts: prompts
     }
   end
 
@@ -70,7 +76,10 @@ defmodule EMCP.Server do
     {:ok,
      %{
        "protocolVersion" => @protocol_version,
-       "capabilities" => %{"tools" => %{"listChanged" => true}},
+       "capabilities" => %{
+         "tools" => %{"listChanged" => true},
+         "prompts" => %{"listChanged" => true}
+       },
        "serverInfo" => %{
          "name" => server.name,
          "version" => server.version
@@ -102,6 +111,29 @@ defmodule EMCP.Server do
 
       :error ->
         {:error, @invalid_params, "Tool not found: #{name}"}
+    end
+  end
+
+  defp dispatch(server, "prompts/list", _params) do
+    prompts = server.prompts |> Map.values() |> Enum.map(&EMCP.Prompt.to_map/1)
+    {:ok, %{"prompts" => prompts}}
+  end
+
+  defp dispatch(server, "prompts/get", %{"name" => name} = params) do
+    case Map.fetch(server.prompts, name) do
+      {:ok, module} ->
+        args = params["arguments"] || %{}
+
+        case EMCP.Prompt.validate_arguments(module, args) do
+          :ok ->
+            {:ok, module.template(args)}
+
+          {:error, message} ->
+            {:error, @invalid_params, message}
+        end
+
+      :error ->
+        {:error, @invalid_params, "Prompt not found: #{name}"}
     end
   end
 

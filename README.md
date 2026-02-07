@@ -4,7 +4,7 @@ An minimal Elixir MCP (Model Context Protocol) server.
 
 ## Limitations (for now)
 
-- **No resources or prompts.** Only tools are supported.
+- **No resources.** Only tools and prompts are supported.
 
 ## Usage
 
@@ -101,6 +101,54 @@ Configure it in Claude Code via `.claude/settings.json`:
     }
   }
 }
+```
+
+## Prompts
+
+Prompts are reusable templates that return structured messages. Define a prompt module, then register it in your config:
+
+```elixir
+defmodule MyApp.Prompts.CodeReview do
+  @behaviour EMCP.Prompt
+
+  @impl EMCP.Prompt
+  def name, do: "code_review"
+
+  @impl EMCP.Prompt
+  def description, do: "Reviews code with optional focus area"
+
+  @impl EMCP.Prompt
+  def arguments do
+    [
+      %{name: "code", description: "The code to review", required: true},
+      %{name: "focus", description: "Optional area to focus on"}
+    ]
+  end
+
+  @impl EMCP.Prompt
+  def template(%{"code" => code} = args) do
+    focus = args["focus"]
+
+    user_text =
+      if focus,
+        do: "Review this code, focusing on #{focus}:\n\n#{code}",
+        else: "Review this code:\n\n#{code}"
+
+    %{
+      "description" => "Code review prompt",
+      "messages" => [
+        %{"role" => "user", "content" => %{"type" => "text", "text" => user_text}},
+        %{"role" => "assistant", "content" => %{"type" => "text", "text" => "I'll review the code you've provided."}}
+      ]
+    }
+  end
+end
+```
+
+```elixir
+# config/config.exs
+config :emcp,
+  prompts: [MyApp.Prompts.CodeReview]
 ```
 
 ## Acknowledgements
