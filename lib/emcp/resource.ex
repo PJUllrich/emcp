@@ -5,14 +5,7 @@ defmodule EMCP.Resource do
   @callback name() :: String.t()
   @callback description() :: String.t()
   @callback mime_type() :: String.t()
-  @callback read() :: [content()]
-
-  @type content :: %{
-          required(:uri) => String.t(),
-          required(:mime_type) => String.t(),
-          optional(:text) => String.t(),
-          optional(:blob) => String.t()
-        }
+  @callback read() :: String.t()
 
   def to_map(module) do
     %{
@@ -21,5 +14,9 @@ defmodule EMCP.Resource do
       "description" => module.description(),
       "mimeType" => module.mime_type()
     }
+  end
+
+  def to_contents(module) do
+    [%{"uri" => module.uri(), "mimeType" => module.mime_type(), "text" => module.read()}]
   end
 end

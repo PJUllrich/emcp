@@ -171,9 +171,7 @@ defmodule MyApp.Resources.Readme do
   def mime_type, do: "text/plain"
 
   @impl EMCP.Resource
-  def read do
-    [%{"uri" => uri(), "mimeType" => mime_type(), "text" => File.read!("README.md")}]
-  end
+  def read, do: File.read!("README.md")
 end
 ```
 
@@ -200,7 +198,7 @@ defmodule MyApp.ResourceTemplates.UserProfile do
     case String.split(rest, "/") do
       [user_id, "profile"] ->
         user = MyApp.Repo.get!(MyApp.User, user_id)
-        {:ok, [%{"uri" => "db:///users/#{user_id}/profile", "mimeType" => mime_type(), "text" => JSON.encode!(user)}]}
+        {:ok, JSON.encode!(user)}
 
       _ ->
         {:error, "Resource not found"}

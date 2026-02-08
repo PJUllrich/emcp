@@ -17,14 +17,7 @@ defmodule EMCP.ResourceTemplates.UserProfile do
   def read("file:///users/" <> rest) do
     case String.split(rest, "/") do
       [user_id, "profile"] ->
-        {:ok,
-         [
-           %{
-             "uri" => "file:///users/#{user_id}/profile",
-             "mimeType" => mime_type(),
-             "text" => JSON.encode!(%{"user_id" => user_id, "name" => "User #{user_id}"})
-           }
-         ]}
+        {:ok, JSON.encode!(%{"user_id" => user_id, "name" => "User #{user_id}"})}
 
       _ ->
         {:error, "Resource not found"}
