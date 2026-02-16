@@ -12,7 +12,7 @@ defmodule EMCP.Server do
 
   alias __MODULE__
 
-  defstruct [:name, :version, :tools, :prompts, :resources, :resource_templates]
+  defstruct [:name, :version, :tools, :prompts, :resources, :resource_templates, :session_store]
 
   defmacro __using__(opts) do
     quote do
@@ -29,7 +29,8 @@ defmodule EMCP.Server do
       tools: opts |> Keyword.get(:tools, []) |> Map.new(&{&1.name(), &1}),
       prompts: opts |> Keyword.get(:prompts, []) |> Map.new(&{&1.name(), &1}),
       resources: opts |> Keyword.get(:resources, []) |> Map.new(&{&1.uri(), &1}),
-      resource_templates: Keyword.get(opts, :resource_templates, [])
+      resource_templates: Keyword.get(opts, :resource_templates, []),
+      session_store: Keyword.get(opts, :session_store, EMCP.SessionStore.ETS)
     }
   end
 

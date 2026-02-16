@@ -323,13 +323,13 @@ defmodule EMCP.Transport.StreamableHTTPSSETest do
       {socket, _headers} = open_sse(port, session_id)
       Process.sleep(100)
 
-      assert EMCP.SessionStore.get_sse_pid(session_id) != nil
+      assert EMCP.SessionStore.ETS.get_pid(session_id) != nil
 
       close_sse(socket)
       Process.sleep(300)
 
-      assert EMCP.SessionStore.get_sse_pid(session_id) == nil
-      assert EMCP.SessionStore.lookup(session_id) != nil
+      assert EMCP.SessionStore.ETS.get_pid(session_id) == nil
+      assert EMCP.SessionStore.ETS.lookup(session_id) != nil
     end
 
     test "tools/call response is streamed via SSE", %{port: port} do
@@ -368,7 +368,8 @@ defmodule EMCP.Transport.StreamableHTTPSSETest do
         "method" => "notifications/tools/list_changed"
       }
 
-      assert :ok = EMCP.Transport.StreamableHTTP.notify(session_id, notification)
+      store = EMCP.SessionStore.ETS
+      assert :ok = EMCP.Transport.StreamableHTTP.notify(store, session_id, notification)
 
       data = receive_sse_event(socket)
 
@@ -382,11 +383,13 @@ defmodule EMCP.Transport.StreamableHTTPSSETest do
       session_id = init_session(port)
 
       assert {:error, :no_sse_connection} =
-               EMCP.Transport.StreamableHTTP.notify(session_id, %{"test" => true})
+               EMCP.Transport.StreamableHTTP.notify(EMCP.SessionStore.ETS, session_id, %{
+                 "test" => true
+               })
     end
   end
 
-  describe "broadcast/1" do
+  describe "broadcast/2" do
     test "sends to all sessions with active SSE", %{port: port} do
       session_id1 = init_session(port)
       session_id2 = init_session(port)
@@ -400,7 +403,7 @@ defmodule EMCP.Transport.StreamableHTTPSSETest do
         "method" => "notifications/tools/list_changed"
       }
 
-      EMCP.Transport.StreamableHTTP.broadcast(notification)
+      EMCP.Transport.StreamableHTTP.broadcast(EMCP.SessionStore.ETS, notification)
 
       data1 = receive_sse_event(socket1)
       assert data1 =~ "notifications/tools/list_changed"

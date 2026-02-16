@@ -436,7 +436,12 @@ defmodule EMCP.Transport.StreamableHTTPE2ETest do
         "method" => "notifications/resources/list_changed"
       }
 
-      assert :ok = EMCP.Transport.StreamableHTTP.notify(session_id, notification)
+      assert :ok =
+               EMCP.Transport.StreamableHTTP.notify(
+                 EMCP.SessionStore.ETS,
+                 session_id,
+                 notification
+               )
 
       data = receive_sse_event(socket)
       message = decode_sse_data(data)
@@ -450,7 +455,9 @@ defmodule EMCP.Transport.StreamableHTTPE2ETest do
       session_id = init_session(port)
 
       assert {:error, :no_sse_connection} =
-               EMCP.Transport.StreamableHTTP.notify(session_id, %{"test" => true})
+               EMCP.Transport.StreamableHTTP.notify(EMCP.SessionStore.ETS, session_id, %{
+                 "test" => true
+               })
     end
   end
 
@@ -468,7 +475,7 @@ defmodule EMCP.Transport.StreamableHTTPE2ETest do
         "method" => "notifications/tools/list_changed"
       }
 
-      EMCP.Transport.StreamableHTTP.broadcast(notification)
+      EMCP.Transport.StreamableHTTP.broadcast(EMCP.SessionStore.ETS, notification)
 
       data1 = receive_sse_event(socket1)
       assert data1 =~ "notifications/tools/list_changed"

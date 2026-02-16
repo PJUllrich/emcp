@@ -1,10 +1,56 @@
 # EMCP
 
-An minimal Elixir MCP (Model Context Protocol) server.
+A minimal Elixir MCP (Model Context Protocol) server.
 
-## Usage
+## Setup
 
-### 1. Define a tool
+### 1. Initialize the session store
+
+Add the session store initialization to your application's `start/2`:
+
+```elixir
+defmodule MyApp.Application do
+  use Application
+
+  def start(_type, _args) do
+    EMCP.SessionStore.ETS.init()
+
+    children = [
+      # ...
+    ]
+
+    Supervisor.start_link(children, strategy: :one_for_one)
+  end
+end
+```
+
+You can use a custom session store by implementing the `EMCP.SessionStore` behaviour.
+
+### 2. Define a server
+
+```elixir
+defmodule MyApp.MCPServer do
+  use EMCP.Server,
+    name: "my-app",
+    version: "1.0.0",
+    tools: [MyApp.Tools.Echo],
+    prompts: [MyApp.Prompts.CodeReview],
+    resources: [MyApp.Resources.Readme],
+    resource_templates: [MyApp.ResourceTemplates.UserProfile]
+end
+```
+
+### 3. Mount the transport
+
+Add the StreamableHTTP transport to your Phoenix router. Mount it outside any pipeline since EMCP handles content negotiation itself:
+
+```elixir
+scope "/mcp" do
+  forward "/", EMCP.Transport.StreamableHTTP, server: MyApp.MCPServer
+end
+```
+
+## 4. Add tools to your server
 
 ```elixir
 defmodule MyApp.Tools.Echo do
@@ -21,24 +67,14 @@ defmodule MyApp.Tools.Echo do
     %{
       type: :object,
       properties: %{
-        message: %{type: :string},
-        count: %{type: :integer},
-        temperature: %{type: :number},
-        verbose: %{type: :boolean},
-        tags: %{type: :array, items: %{type: :string}},
-        options: %{
-          type: :object,
-          properties: %{
-            format: %{type: :string}
-          }
-        }
+        message: %{type: :string}
       },
       required: [:message]
     }
   end
 
   @impl EMCP.Tool
-  def call(%{"message" => message}) do
+  def call(_conn, %{"message" => message}) do
     EMCP.Tool.response([%{"type" => "text", "text" => message}])
   end
 
@@ -47,64 +83,9 @@ defmodule MyApp.Tools.Echo do
 end
 ```
 
-### 2. Configure the server
-
-```elixir
-# config/config.exs
-config :emcp,
-  name: "my-app",
-  version: "1.0.0",
-  tools: [MyApp.Tools.Echo],
-  prompts: [MyApp.Prompts.CodeReview],
-  resources: [MyApp.Resources.Readme],
-  resource_templates: [MyApp.ResourceTemplates.UserProfile]
-```
-
-### 3. Mount the transport
-
-Add the StreamableHTTP transport to your Phoenix router. Mount it outside any pipeline since EMCP handles content negotiation itself:
-
-```elixir
-scope "/mcp" do
-  forward "/", EMCP.Transport.StreamableHTTP
-end
-```
-
-Sessions are managed automatically with a configurable TTL (default 60 minutes):
-
-```elixir
-config :emcp, session_ttl: to_timeout(minute: 60)
-```
-
-## STDIO Transport
-
-For local development or CLI tools, you can use the STDIO transport instead. It reads JSON-RPC messages from stdin and writes responses to stdout.
-
-Add it to your supervision tree:
-
-```elixir
-children = [
-  EMCP.Transport.STDIO
-]
-```
-
-Configure it in Claude Code via `.claude/settings.json`:
-
-```json
-{
-  "mcpServers": {
-    "my-app": {
-      "command": "mix",
-      "args": ["run", "--no-halt"],
-      "cwd": "/path/to/your/elixir/project"
-    }
-  }
-}
-```
-
 ## Prompts
 
-Prompts are reusable templates that return structured messages. Define a prompt module, then register it in your config:
+Prompts are reusable templates that return structured messages:
 
 ```elixir
 defmodule MyApp.Prompts.CodeReview do
@@ -125,7 +106,7 @@ defmodule MyApp.Prompts.CodeReview do
   end
 
   @impl EMCP.Prompt
-  def template(%{"code" => code} = args) do
+  def template(_conn, %{"code" => code} = args) do
     focus = args["focus"]
 
     user_text =
@@ -142,12 +123,6 @@ defmodule MyApp.Prompts.CodeReview do
     }
   end
 end
-```
-
-```elixir
-# config/config.exs
-config :emcp,
-  prompts: [MyApp.Prompts.CodeReview]
 ```
 
 ## Resources
@@ -171,7 +146,7 @@ defmodule MyApp.Resources.Readme do
   def mime_type, do: "text/plain"
 
   @impl EMCP.Resource
-  def read, do: File.read!("README.md")
+  def read(_conn), do: File.read!("README.md")
 end
 ```
 
@@ -194,7 +169,7 @@ defmodule MyApp.ResourceTemplates.UserProfile do
   def mime_type, do: "application/json"
 
   @impl EMCP.ResourceTemplate
-  def read("db:///users/" <> rest) do
+  def read(_conn, "db:///users/" <> rest) do
     case String.split(rest, "/") do
       [user_id, "profile"] ->
         user = MyApp.Repo.get!(MyApp.User, user_id)
@@ -205,20 +180,37 @@ defmodule MyApp.ResourceTemplates.UserProfile do
     end
   end
 
-  def read(_uri), do: {:error, "Resource not found"}
+  def read(_conn, _uri), do: {:error, "Resource not found"}
 end
 ```
 
-Register both in your config:
+When a client calls `resources/read`, the server first tries an exact URI match against static resources. If none match, it tries each resource template in order until one handles the URI.
+
+## STDIO Transport
+
+For local development or CLI tools, you can use the STDIO transport instead. It reads JSON-RPC messages from stdin and writes responses to stdout.
+
+Add it to your supervision tree:
 
 ```elixir
-# config/config.exs
-config :emcp,
-  resources: [MyApp.Resources.Readme],
-  resource_templates: [MyApp.ResourceTemplates.UserProfile]
+children = [
+  {EMCP.Transport.STDIO, server: MyApp.MCPServer}
+]
 ```
 
-When a client calls `resources/read`, the server first tries an exact URI match against static resources. If none match, it tries each resource template in order until one handles the URI.
+Configure it in Claude Code via `.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "my-app": {
+      "command": "mix",
+      "args": ["run", "--no-halt"],
+      "cwd": "/path/to/your/elixir/project"
+    }
+  }
+}
+```
 
 ## Acknowledgements
 

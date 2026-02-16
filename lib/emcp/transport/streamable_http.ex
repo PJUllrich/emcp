@@ -11,8 +11,8 @@ defmodule EMCP.Transport.StreamableHTTP do
   # Public API
 
   @doc "Send a notification to a specific session's SSE connection."
-  def notify(session_id, message) do
-    case EMCP.SessionStore.get_sse_pid(session_id) do
+  def notify(store, session_id, message) do
+    case store.get_pid(session_id) do
       nil ->
         {:error, :no_sse_connection}
 
@@ -23,12 +23,12 @@ defmodule EMCP.Transport.StreamableHTTP do
   end
 
   @doc "Broadcast a notification to all sessions with active SSE connections."
-  def broadcast(message) do
+  def broadcast(store, message) do
     encoded = JSON.encode!(message)
 
-    :ets.tab2list(EMCP.SessionStore)
+    store.all_sessions()
     |> Enum.each(fn
-      {_session_id, _last_active, pid} when is_pid(pid) ->
+      %EMCP.Session{pid: pid} when is_pid(pid) ->
         send(pid, {:sse_message, encoded})
 
       _ ->
@@ -42,17 +42,19 @@ defmodule EMCP.Transport.StreamableHTTP do
   def init(opts), do: opts
 
   @impl Plug
-  def call(%Plug.Conn{method: "GET"} = conn, _opts), do: handle_get(conn)
+  def call(%Plug.Conn{method: "GET"} = conn, opts), do: handle_get(conn, opts)
   def call(%Plug.Conn{method: "POST"} = conn, opts), do: handle_post(conn, opts)
-  def call(%Plug.Conn{method: "DELETE"} = conn, _opts), do: handle_delete(conn)
+  def call(%Plug.Conn{method: "DELETE"} = conn, opts), do: handle_delete(conn, opts)
   def call(conn, _opts), do: json_error(conn, 405, "Method not allowed")
 
   # GET — SSE streaming
 
-  defp handle_get(conn) do
+  defp handle_get(conn, opts) do
+    store = get_store(opts)
+
     if accepts_event_stream?(conn) do
-      with_session(conn, fn session_id ->
-        EMCP.SessionStore.register_sse(session_id, self())
+      with_session(conn, store, fn session_id ->
+        store.register(session_id, self())
 
         conn =
           conn
@@ -63,7 +65,7 @@ defmodule EMCP.Transport.StreamableHTTP do
         try do
           sse_loop(conn, session_id, 0)
         after
-          EMCP.SessionStore.unregister_sse(session_id)
+          store.unregister(session_id)
         end
       end)
     else
@@ -98,7 +100,9 @@ defmodule EMCP.Transport.StreamableHTTP do
         if initialize?(request) do
           initialize_session(conn, request, opts)
         else
-          with_session(conn, fn session_id -> dispatch(conn, request, session_id, opts) end)
+          store = get_store(opts)
+
+          with_session(conn, store, fn session_id -> dispatch(conn, request, session_id, opts) end)
         end
 
       {:error, message} ->
@@ -107,8 +111,9 @@ defmodule EMCP.Transport.StreamableHTTP do
   end
 
   defp initialize_session(conn, request, opts) do
+    store = get_store(opts)
     session_id = generate_session_id()
-    EMCP.SessionStore.store(session_id)
+    store.store(session_id)
 
     conn
     |> put_resp_header("mcp-session-id", session_id)
@@ -116,12 +121,14 @@ defmodule EMCP.Transport.StreamableHTTP do
   end
 
   defp dispatch(conn, request, session_id, opts) do
+    store = get_store(opts)
+
     if notification?(request) do
       send_resp(conn, 202, "")
     else
       response = handle_message(conn, request, opts)
 
-      case EMCP.SessionStore.get_sse_pid(session_id) do
+      case store.get_pid(session_id) do
         pid when is_pid(pid) ->
           send(pid, {:sse_message, JSON.encode!(response)})
           json_response(conn, 202, %{})
@@ -134,23 +141,25 @@ defmodule EMCP.Transport.StreamableHTTP do
 
   # DELETE — session termination
 
-  defp handle_delete(conn) do
-    with_session(conn, fn session_id ->
-      case EMCP.SessionStore.get_sse_pid(session_id) do
+  defp handle_delete(conn, opts) do
+    store = get_store(opts)
+
+    with_session(conn, store, fn session_id ->
+      case store.get_pid(session_id) do
         pid when is_pid(pid) -> send(pid, :close_sse)
         nil -> :ok
       end
 
-      EMCP.SessionStore.delete(session_id)
+      store.delete(session_id)
       json_response(conn, 200, %{"success" => true})
     end)
   end
 
   # Session helpers
 
-  defp with_session(conn, fun) do
+  defp with_session(conn, store, fun) do
     with {:ok, session_id} <- require_session_id(conn),
-         :ok <- validate_session(session_id) do
+         :ok <- validate_session(store, session_id) do
       fun.(session_id)
     else
       {:error, status, message} -> json_error(conn, status, message)
@@ -164,17 +173,17 @@ defmodule EMCP.Transport.StreamableHTTP do
     end
   end
 
-  defp validate_session(session_id) do
-    case EMCP.SessionStore.lookup(session_id) do
+  defp validate_session(store, session_id) do
+    case store.lookup(session_id) do
       nil ->
-        EMCP.SessionStore.store(session_id)
+        store.store(session_id)
         :ok
 
-      {last_active, _sse_pid} ->
-        if System.monotonic_time(:millisecond) - last_active > session_ttl() do
-          EMCP.SessionStore.store(session_id)
+      %EMCP.Session{last_seen: last_seen} ->
+        if System.monotonic_time(:millisecond) - last_seen > session_ttl() do
+          store.store(session_id)
         else
-          EMCP.SessionStore.touch(session_id)
+          store.touch(session_id)
         end
 
         :ok
@@ -212,6 +221,10 @@ defmodule EMCP.Transport.StreamableHTTP do
 
   defp handle_message(conn, request, opts) do
     opts[:server].server() |> EMCP.Server.handle_message(conn, request)
+  end
+
+  defp get_store(opts) do
+    opts[:server].server().session_store
   end
 
   defp accepts_event_stream?(conn) do

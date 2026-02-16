@@ -203,7 +203,7 @@ defmodule EMCP.Transport.StreamableHTTPTest do
 
       # Backdate the session timestamp to make it expired
       :ets.update_element(
-        EMCP.SessionStore,
+        EMCP.SessionStore.ETS,
         session_id,
         {2, System.monotonic_time(:millisecond) - 700_000}
       )
@@ -261,12 +261,12 @@ defmodule EMCP.Transport.StreamableHTTPTest do
       assert_receive :sse_started, 1000
       Process.sleep(50)
 
-      assert EMCP.SessionStore.get_sse_pid("bogus-sse") == pid
+      assert EMCP.SessionStore.ETS.get_pid("bogus-sse") == pid
 
       send(pid, :close_sse)
       Process.sleep(50)
 
-      assert EMCP.SessionStore.get_sse_pid("bogus-sse") == nil
+      assert EMCP.SessionStore.ETS.get_pid("bogus-sse") == nil
     end
 
     test "registers SSE pid for valid session" do
@@ -288,12 +288,12 @@ defmodule EMCP.Transport.StreamableHTTPTest do
       assert_receive :sse_started, 1000
       Process.sleep(50)
 
-      assert EMCP.SessionStore.get_sse_pid(session_id) == pid
+      assert EMCP.SessionStore.ETS.get_pid(session_id) == pid
 
       send(pid, :close_sse)
       Process.sleep(50)
 
-      assert EMCP.SessionStore.get_sse_pid(session_id) == nil
+      assert EMCP.SessionStore.ETS.get_pid(session_id) == nil
     end
   end
 

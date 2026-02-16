@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## v0.3.0
 
 ### Breaking Changes
 
@@ -41,7 +41,23 @@
 
   The `conn` is the `Plug.Conn` struct when using the HTTP transport, or `nil` when using STDIO.
 
+- `EMCP.SessionStore` is now a behaviour. The ETS implementation has moved to `EMCP.SessionStore.ETS`. Custom backends (e.g. Redis) can be used by implementing the `EMCP.SessionStore` behaviour and passing it via `use EMCP.Server`:
+
+  ```elixir
+  defmodule MyApp.MCPServer do
+    use EMCP.Server,
+      name: "my-server",
+      version: "1.0",
+      session_store: MyApp.SessionStore.Redis
+  end
+  ```
+
+  The default is `EMCP.SessionStore.ETS`.
+
+- `EMCP.Transport.StreamableHTTP.notify/2` is now `notify(store, session_id, message)`.
+
+- `EMCP.Transport.StreamableHTTP.broadcast/1` is now `broadcast(store, message)`.
+
+- Added `EMCP.Session` struct with `id`, `last_seen`, and `pid` fields, replacing raw tuples.
+
 - `EMCP.Server.new/0` has been removed. Use `EMCP.Server.new/1` or the generated `MyApp.MCPServer.server/0` instead.
-
-
-
