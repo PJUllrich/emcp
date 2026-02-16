@@ -22,31 +22,7 @@ defmodule EMCP.Server do
     end
   end
 
-  @global_config_keys [:name, :version, :tools, :prompts, :resources, :resource_templates]
-
   def new(opts) do
-    found =
-      Enum.filter(@global_config_keys, fn key ->
-        Application.get_env(:emcp, key) != nil
-      end)
-
-    if found != [] do
-      raise """
-      Global :emcp application config is no longer supported.
-
-      Found config keys: #{inspect(found)}
-
-      Define a server module instead:
-
-          defmodule MyApp.MCPServer do
-            use EMCP.Server,
-              name: "my-server",
-              version: "1.0",
-              tools: [...]
-          end
-      """
-    end
-
     %Server{
       name: Keyword.fetch!(opts, :name),
       version: Keyword.fetch!(opts, :version),
