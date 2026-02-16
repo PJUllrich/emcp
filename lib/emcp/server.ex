@@ -1,6 +1,8 @@
 defmodule EMCP.Server do
   @moduledoc "MCP server that handles JSON-RPC requests and dispatches to registered tools."
 
+  alias __MODULE__
+
   require Logger
 
   @protocol_version "2025-03-26"
@@ -9,8 +11,6 @@ defmodule EMCP.Server do
   @invalid_request -32600
   @method_not_found -32601
   @invalid_params -32602
-
-  alias __MODULE__
 
   defstruct [:name, :version, :tools, :prompts, :resources, :resource_templates, :session_store]
 

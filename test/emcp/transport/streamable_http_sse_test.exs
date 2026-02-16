@@ -68,19 +68,17 @@ defmodule EMCP.Transport.StreamableHTTPSSETest do
   defp response_complete?(data) do
     case String.split(data, "\r\n\r\n", parts: 2) do
       [headers, body] ->
-        cond do
-          String.contains?(headers, "transfer-encoding: chunked") ->
-            String.contains?(body, "0\r\n")
+        if String.contains?(headers, "transfer-encoding: chunked") do
+          String.contains?(body, "0\r\n")
+        else
+          case Regex.run(~r/content-length: (\d+)/i, headers) do
+            [_, len_str] ->
+              {len, _} = Integer.parse(len_str)
+              byte_size(body) >= len
 
-          true ->
-            case Regex.run(~r/content-length: (\d+)/i, headers) do
-              [_, len_str] ->
-                {len, _} = Integer.parse(len_str)
-                byte_size(body) >= len
-
-              nil ->
-                true
-            end
+            nil ->
+              true
+          end
         end
 
       _ ->

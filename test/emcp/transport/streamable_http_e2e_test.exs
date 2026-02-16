@@ -60,15 +60,13 @@ defmodule EMCP.Transport.StreamableHTTPE2ETest do
   defp response_complete?(data) do
     case String.split(data, "\r\n\r\n", parts: 2) do
       [headers, body] ->
-        cond do
-          String.contains?(headers, "transfer-encoding: chunked") ->
-            String.contains?(body, "0\r\n")
-
-          true ->
-            case Regex.run(~r/content-length: (\d+)/i, headers) do
-              [_, len] -> byte_size(body) >= String.to_integer(len)
-              nil -> true
-            end
+        if String.contains?(headers, "transfer-encoding: chunked") do
+          String.contains?(body, "0\r\n")
+        else
+          case Regex.run(~r/content-length: (\d+)/i, headers) do
+            [_, len] -> byte_size(body) >= String.to_integer(len)
+            nil -> true
+          end
         end
 
       _ ->
@@ -205,7 +203,7 @@ defmodule EMCP.Transport.StreamableHTTPE2ETest do
       result = JSON.decode!(output)
 
       assert %{"tools" => tools} = result
-      assert length(tools) > 0
+      refute Enum.empty?(tools)
 
       names = Enum.map(tools, & &1["name"])
       assert "echo" in names

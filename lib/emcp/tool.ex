@@ -44,6 +44,8 @@ defmodule EMCP.Tool do
     %{"content" => content}
   end
 
+  def response(content) when is_map(content), do: response([content])
+
   @doc """
   Wraps an error message into a tool response map with the `isError` flag set.
 
@@ -51,6 +53,10 @@ defmodule EMCP.Tool do
   """
   def error(message) when is_binary(message) do
     %{"content" => [%{"type" => "text", "text" => message}], "isError" => true}
+  end
+
+  def error(message) when is_list(message) do
+    %{"content" => message, "isError" => true}
   end
 
   def to_map(module) do

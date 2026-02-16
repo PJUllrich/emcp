@@ -1,7 +1,8 @@
 defmodule EMCP.Transport.StreamableHTTPTest do
   use ExUnit.Case, async: true
-  import Plug.Test
+
   import Plug.Conn
+  import Plug.Test
 
   defp call(conn) do
     EMCP.Transport.StreamableHTTP.call(

@@ -20,8 +20,7 @@ defmodule EMCP.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:logger],
-      mod: {EMCP.Application, []}
+      extra_applications: [:logger]
     ]
   end
 
@@ -33,6 +32,7 @@ defmodule EMCP.MixProject do
     [
       {:plug, "~> 1.16"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
+      {:quokka, "~> 2.12", only: [:dev, :test], runtime: false},
       {:bandit, "~> 1.0", only: :test}
     ]
   end

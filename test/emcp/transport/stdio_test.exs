@@ -20,7 +20,7 @@ defmodule EMCP.Transport.STDIOTest do
 
       assert %{"tools" => tools} = result
       assert is_list(tools)
-      assert length(tools) > 0
+      refute Enum.empty?(tools)
 
       tool = List.first(tools)
       assert Map.has_key?(tool, "name")

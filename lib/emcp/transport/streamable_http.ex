@@ -237,7 +237,7 @@ defmodule EMCP.Transport.StreamableHTTP do
   # SSE helpers
 
   defp sse_encode(data, id), do: "id: #{id}\nevent: message\ndata: #{data}\n\n"
-  defp sse_keepalive(), do: ": keepalive\n\n"
+  defp sse_keepalive, do: ": keepalive\n\n"
 
   # Response helpers
 
