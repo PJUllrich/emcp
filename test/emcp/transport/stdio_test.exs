@@ -9,7 +9,7 @@ defmodule EMCP.Transport.STDIOTest do
     "run",
     "--no-halt",
     "-e",
-    "EMCP.Transport.STDIO.start_link()"
+    "EMCP.Transport.STDIO.start_link(server: EMCP.TestServer)"
   ]
 
   describe "tools/list" do

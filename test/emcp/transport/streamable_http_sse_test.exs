@@ -7,7 +7,10 @@ defmodule EMCP.Transport.StreamableHTTPSSETest do
     port = Enum.random(49152..65535)
 
     start_supervised!(
-      {Bandit, plug: EMCP.Transport.StreamableHTTP, port: port, startup_log: false}
+      {Bandit,
+       plug: {EMCP.Transport.StreamableHTTP, server: EMCP.TestServer},
+       port: port,
+       startup_log: false}
     )
 
     # Use a short keepalive so server-side SSE loops detect closed

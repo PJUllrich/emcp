@@ -2,7 +2,7 @@ defmodule EMCP.ServerTest do
   use ExUnit.Case, async: true
 
   setup do
-    server = EMCP.Server.new()
+    server = EMCP.TestServer.server()
     {:ok, server: server}
   end
 

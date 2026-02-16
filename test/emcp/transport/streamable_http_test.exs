@@ -4,7 +4,10 @@ defmodule EMCP.Transport.StreamableHTTPTest do
   import Plug.Conn
 
   defp call(conn) do
-    EMCP.Transport.StreamableHTTP.call(conn, EMCP.Transport.StreamableHTTP.init([]))
+    EMCP.Transport.StreamableHTTP.call(
+      conn,
+      EMCP.Transport.StreamableHTTP.init(server: EMCP.TestServer)
+    )
   end
 
   defp post_json(path, body, headers \\ []) do

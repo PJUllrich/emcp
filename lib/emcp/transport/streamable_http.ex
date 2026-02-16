@@ -43,7 +43,7 @@ defmodule EMCP.Transport.StreamableHTTP do
 
   @impl Plug
   def call(%Plug.Conn{method: "GET"} = conn, _opts), do: handle_get(conn)
-  def call(%Plug.Conn{method: "POST"} = conn, _opts), do: handle_post(conn)
+  def call(%Plug.Conn{method: "POST"} = conn, opts), do: handle_post(conn, opts)
   def call(%Plug.Conn{method: "DELETE"} = conn, _opts), do: handle_delete(conn)
   def call(conn, _opts), do: json_error(conn, 405, "Method not allowed")
 
@@ -92,13 +92,13 @@ defmodule EMCP.Transport.StreamableHTTP do
 
   # POST — JSON-RPC requests and notifications
 
-  defp handle_post(conn) do
+  defp handle_post(conn, opts) do
     case read_request(conn) do
       {:ok, request, conn} ->
         if initialize?(request) do
-          initialize_session(conn, request)
+          initialize_session(conn, request, opts)
         else
-          with_session(conn, fn session_id -> dispatch(conn, request, session_id) end)
+          with_session(conn, fn session_id -> dispatch(conn, request, session_id, opts) end)
         end
 
       {:error, message} ->
@@ -106,20 +106,20 @@ defmodule EMCP.Transport.StreamableHTTP do
     end
   end
 
-  defp initialize_session(conn, request) do
+  defp initialize_session(conn, request, opts) do
     session_id = generate_session_id()
     EMCP.SessionStore.store(session_id)
 
     conn
     |> put_resp_header("mcp-session-id", session_id)
-    |> json_response(200, handle_message(request))
+    |> json_response(200, handle_message(request, opts))
   end
 
-  defp dispatch(conn, request, session_id) do
+  defp dispatch(conn, request, session_id, opts) do
     if notification?(request) do
       send_resp(conn, 202, "")
     else
-      response = handle_message(request)
+      response = handle_message(request, opts)
 
       case EMCP.SessionStore.get_sse_pid(session_id) do
         pid when is_pid(pid) ->
@@ -210,8 +210,8 @@ defmodule EMCP.Transport.StreamableHTTP do
   defp notification?(request),
     do: Map.has_key?(request, "method") and not Map.has_key?(request, "id")
 
-  defp handle_message(request) do
-    EMCP.Server.new() |> EMCP.Server.handle_message(request)
+  defp handle_message(request, opts) do
+    opts[:server].server() |> EMCP.Server.handle_message(request)
   end
 
   defp accepts_event_stream?(conn) do

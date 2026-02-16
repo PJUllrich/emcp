@@ -3,13 +3,13 @@ defmodule EMCP.Transport.STDIO do
 
   use GenServer
 
-  def start_link(_opts \\ []) do
-    GenServer.start_link(__MODULE__, [], name: __MODULE__)
+  def start_link(opts) do
+    GenServer.start_link(__MODULE__, opts, name: __MODULE__)
   end
 
   @impl GenServer
-  def init(_opts) do
-    server = EMCP.Server.new()
+  def init(opts) do
+    server = opts[:server].server()
     send(self(), :read)
     {:ok, server}
   end

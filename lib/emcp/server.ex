@@ -14,42 +14,47 @@ defmodule EMCP.Server do
 
   defstruct [:name, :version, :tools, :prompts, :resources, :resource_templates]
 
-  ## Server initialization
+  defmacro __using__(opts) do
+    quote do
+      def server do
+        EMCP.Server.new(unquote(opts))
+      end
+    end
+  end
 
-  def new do
+  @global_config_keys [:name, :version, :tools, :prompts, :resources, :resource_templates]
+
+  def new(opts) do
+    found =
+      Enum.filter(@global_config_keys, fn key ->
+        Application.get_env(:emcp, key) != nil
+      end)
+
+    if found != [] do
+      raise """
+      Global :emcp application config is no longer supported.
+
+      Found config keys: #{inspect(found)}
+
+      Define a server module instead:
+
+          defmodule MyApp.MCPServer do
+            use EMCP.Server,
+              name: "my-server",
+              version: "1.0",
+              tools: [...]
+          end
+      """
+    end
+
     %Server{
-      name: server_name(),
-      version: server_version(),
-      tools: collect_tools(),
-      prompts: collect_prompts(),
-      resources: collect_resources(),
-      resource_templates: collect_resource_templates()
+      name: Keyword.fetch!(opts, :name),
+      version: Keyword.fetch!(opts, :version),
+      tools: opts |> Keyword.get(:tools, []) |> Map.new(&{&1.name(), &1}),
+      prompts: opts |> Keyword.get(:prompts, []) |> Map.new(&{&1.name(), &1}),
+      resources: opts |> Keyword.get(:resources, []) |> Map.new(&{&1.uri(), &1}),
+      resource_templates: Keyword.get(opts, :resource_templates, [])
     }
-  end
-
-  defp server_name(), do: Application.fetch_env!(:emcp, :name)
-  defp server_version(), do: Application.fetch_env!(:emcp, :version)
-
-  defp collect_tools() do
-    :emcp
-    |> Application.get_env(:tools, [])
-    |> Map.new(fn mod -> {mod.name(), mod} end)
-  end
-
-  defp collect_prompts() do
-    :emcp
-    |> Application.get_env(:prompts, [])
-    |> Map.new(fn mod -> {mod.name(), mod} end)
-  end
-
-  defp collect_resources() do
-    :emcp
-    |> Application.get_env(:resources, [])
-    |> Map.new(fn mod -> {mod.uri(), mod} end)
-  end
-
-  defp collect_resource_templates() do
-    Application.get_env(:emcp, :resource_templates, [])
   end
 
   ## Message processing
