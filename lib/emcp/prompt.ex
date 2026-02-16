@@ -4,7 +4,7 @@ defmodule EMCP.Prompt do
   @callback name() :: String.t()
   @callback description() :: String.t()
   @callback arguments() :: [argument()]
-  @callback template(args :: map()) :: result()
+  @callback template(conn :: Plug.Conn.t() | nil, args :: map()) :: result()
 
   @type argument :: %{
           required(:name) => String.t(),

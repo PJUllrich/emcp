@@ -19,7 +19,7 @@ defmodule EMCP.Tools.Echo do
   end
 
   @impl EMCP.Tool
-  def call(%{"message" => message}) do
+  def call(_conn, %{"message" => message}) do
     EMCP.Tool.response([%{"type" => "text", "text" => message}])
   end
 end

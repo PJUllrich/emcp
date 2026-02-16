@@ -112,14 +112,14 @@ defmodule EMCP.Transport.StreamableHTTP do
 
     conn
     |> put_resp_header("mcp-session-id", session_id)
-    |> json_response(200, handle_message(request, opts))
+    |> json_response(200, handle_message(conn, request, opts))
   end
 
   defp dispatch(conn, request, session_id, opts) do
     if notification?(request) do
       send_resp(conn, 202, "")
     else
-      response = handle_message(request, opts)
+      response = handle_message(conn, request, opts)
 
       case EMCP.SessionStore.get_sse_pid(session_id) do
         pid when is_pid(pid) ->
@@ -210,8 +210,8 @@ defmodule EMCP.Transport.StreamableHTTP do
   defp notification?(request),
     do: Map.has_key?(request, "method") and not Map.has_key?(request, "id")
 
-  defp handle_message(request, opts) do
-    opts[:server].server() |> EMCP.Server.handle_message(request)
+  defp handle_message(conn, request, opts) do
+    opts[:server].server() |> EMCP.Server.handle_message(conn, request)
   end
 
   defp accepts_event_stream?(conn) do

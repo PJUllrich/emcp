@@ -16,7 +16,7 @@ defmodule EMCP.Prompts.CodeReview do
   end
 
   @impl EMCP.Prompt
-  def template(args) do
+  def template(_conn, args) do
     code = args["code"]
     focus = args["focus"]
 

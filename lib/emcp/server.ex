@@ -35,10 +35,10 @@ defmodule EMCP.Server do
 
   ## Message processing
 
-  def handle_message(server, raw) when is_binary(raw) do
+  def handle_message(server, conn, raw) when is_binary(raw) do
     case JSON.decode(raw) do
       {:ok, request} ->
-        handle_request(server, request)
+        handle_request(server, conn, request)
 
       {:error, _} ->
         Logger.error("Failed to parse JSON request")
@@ -46,33 +46,37 @@ defmodule EMCP.Server do
     end
   end
 
-  def handle_message(server, request) when is_map(request) do
-    handle_request(server, request)
+  def handle_message(server, conn, request) when is_map(request) do
+    handle_request(server, conn, request)
   end
 
-  defp handle_request(server, %{"jsonrpc" => "2.0", "method" => method, "id" => id} = request) do
+  defp handle_request(
+         server,
+         conn,
+         %{"jsonrpc" => "2.0", "method" => method, "id" => id} = request
+       ) do
     Logger.debug("Received request method=#{method} id=#{id}")
 
     case method do
       "initialize" -> handle_initialize(server, id)
       "ping" -> handle_ping(id)
       "tools/list" -> handle_list_tools(server, id)
-      "tools/call" -> handle_call_tool(server, id, request["params"])
+      "tools/call" -> handle_call_tool(server, conn, id, request["params"])
       "prompts/list" -> handle_list_prompts(server, id)
-      "prompts/get" -> handle_get_prompt(server, id, request["params"])
+      "prompts/get" -> handle_get_prompt(server, conn, id, request["params"])
       "resources/list" -> handle_list_resources(server, id)
-      "resources/read" -> handle_read_resource(server, id, request["params"])
+      "resources/read" -> handle_read_resource(server, conn, id, request["params"])
       "resources/templates/list" -> handle_list_resource_templates(server, id)
       other -> error_response(id, @method_not_found, "Method not found: #{other}")
     end
   end
 
-  defp handle_request(_server, %{"jsonrpc" => "2.0", "method" => method}) do
+  defp handle_request(_server, _conn, %{"jsonrpc" => "2.0", "method" => method}) do
     Logger.debug("Received notification method=#{method}")
     nil
   end
 
-  defp handle_request(_server, _invalid) do
+  defp handle_request(_server, _conn, _invalid) do
     Logger.error("Received invalid request")
     error_response(nil, @invalid_request, "Invalid Request")
   end
@@ -107,14 +111,14 @@ defmodule EMCP.Server do
     result_or_error(request_id, {:ok, %{"tools" => tools}})
   end
 
-  defp handle_call_tool(server, request_id, %{"name" => name} = params) do
+  defp handle_call_tool(server, conn, request_id, %{"name" => name} = params) do
     case Map.fetch(server.tools, name) do
       {:ok, module} ->
         args = params["arguments"] || %{}
 
         case EMCP.Tool.InputSchema.validate(module.input_schema(), args) do
           :ok ->
-            result_or_error(request_id, {:ok, module.call(args)})
+            result_or_error(request_id, {:ok, module.call(conn, args)})
 
           {:error, message} ->
             result_or_error(request_id, {:error, @invalid_params, message})
@@ -130,14 +134,14 @@ defmodule EMCP.Server do
     result_or_error(request_id, {:ok, %{"prompts" => prompts}})
   end
 
-  defp handle_get_prompt(server, request_id, %{"name" => name} = params) do
+  defp handle_get_prompt(server, conn, request_id, %{"name" => name} = params) do
     case Map.fetch(server.prompts, name) do
       {:ok, module} ->
         args = params["arguments"] || %{}
 
         case EMCP.Prompt.validate_arguments(module, args) do
           :ok ->
-            result_or_error(request_id, {:ok, module.template(args)})
+            result_or_error(request_id, {:ok, module.template(conn, args)})
 
           {:error, message} ->
             result_or_error(request_id, {:error, @invalid_params, message})
@@ -153,13 +157,16 @@ defmodule EMCP.Server do
     result_or_error(request_id, {:ok, %{"resources" => resources}})
   end
 
-  defp handle_read_resource(server, request_id, %{"uri" => uri}) do
+  defp handle_read_resource(server, conn, request_id, %{"uri" => uri}) do
     case Map.fetch(server.resources, uri) do
       {:ok, module} ->
-        result_or_error(request_id, {:ok, %{"contents" => EMCP.Resource.to_contents(module)}})
+        result_or_error(
+          request_id,
+          {:ok, %{"contents" => EMCP.Resource.to_contents(module, conn)}}
+        )
 
       :error ->
-        try_resource_templates(server.resource_templates, request_id, uri)
+        try_resource_templates(server.resource_templates, conn, request_id, uri)
     end
   end
 
@@ -168,18 +175,18 @@ defmodule EMCP.Server do
     result_or_error(request_id, {:ok, %{"resourceTemplates" => templates}})
   end
 
-  defp try_resource_templates([], request_id, uri) do
+  defp try_resource_templates([], _conn, request_id, uri) do
     result_or_error(request_id, {:error, @invalid_params, "Resource not found: #{uri}"})
   end
 
-  defp try_resource_templates([template | rest], request_id, uri) do
-    case template.read(uri) do
+  defp try_resource_templates([template | rest], conn, request_id, uri) do
+    case template.read(conn, uri) do
       {:ok, text} ->
         contents = EMCP.ResourceTemplate.to_contents(template, uri, text)
         result_or_error(request_id, {:ok, %{"contents" => contents}})
 
       {:error, _} ->
-        try_resource_templates(rest, request_id, uri)
+        try_resource_templates(rest, conn, request_id, uri)
     end
   end
 

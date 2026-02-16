@@ -39,7 +39,7 @@ defmodule EMCP.Tools.AllTypes do
   end
 
   @impl EMCP.Tool
-  def call(args) do
+  def call(_conn, args) do
     EMCP.Tool.response([%{"type" => "text", "text" => JSON.encode!(args)}])
   end
 end

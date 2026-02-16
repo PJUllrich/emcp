@@ -14,7 +14,7 @@ defmodule EMCP.ServerTest do
       "params" => %{"name" => name, "arguments" => args}
     }
 
-    EMCP.Server.handle_message(server, JSON.encode!(request))
+    EMCP.Server.handle_message(server, nil, JSON.encode!(request))
   end
 
   defp valid_args(overrides \\ %{}) do
@@ -48,7 +48,7 @@ defmodule EMCP.ServerTest do
     assert message == expected_message
   end
 
-  describe "handle_message/2 with pre-decoded map" do
+  describe "handle_message/3 with pre-decoded map" do
     test "accepts an already-decoded map", %{server: server} do
       request = %{
         "jsonrpc" => "2.0",
@@ -56,7 +56,7 @@ defmodule EMCP.ServerTest do
         "method" => "ping"
       }
 
-      response = EMCP.Server.handle_message(server, request)
+      response = EMCP.Server.handle_message(server, nil, request)
       assert %{"jsonrpc" => "2.0", "id" => 1, "result" => %{}} = response
     end
 
@@ -68,12 +68,12 @@ defmodule EMCP.ServerTest do
         "params" => %{"name" => "echo", "arguments" => %{"message" => "hi"}}
       }
 
-      response = EMCP.Server.handle_message(server, request)
+      response = EMCP.Server.handle_message(server, nil, request)
       assert %{"result" => %{"content" => [%{"text" => "hi"}]}} = response
     end
 
     test "returns error for invalid map request", %{server: server} do
-      response = EMCP.Server.handle_message(server, %{"bad" => "request"})
+      response = EMCP.Server.handle_message(server, nil, %{"bad" => "request"})
       assert %{"error" => %{"code" => -32600}} = response
     end
   end
@@ -332,7 +332,7 @@ defmodule EMCP.ServerTest do
       "params" => %{}
     }
 
-    EMCP.Server.handle_message(server, JSON.encode!(request))
+    EMCP.Server.handle_message(server, nil, JSON.encode!(request))
   end
 
   defp get_prompt(server, name, args \\ %{}) do
@@ -343,7 +343,7 @@ defmodule EMCP.ServerTest do
       "params" => %{"name" => name, "arguments" => args}
     }
 
-    EMCP.Server.handle_message(server, JSON.encode!(request))
+    EMCP.Server.handle_message(server, nil, JSON.encode!(request))
   end
 
   describe "prompts/list" do
@@ -428,7 +428,7 @@ defmodule EMCP.ServerTest do
         "params" => %{}
       }
 
-      response = EMCP.Server.handle_message(server, request)
+      response = EMCP.Server.handle_message(server, nil, request)
       assert %{"result" => %{"capabilities" => capabilities}} = response
       assert capabilities["prompts"] == %{"listChanged" => true}
     end

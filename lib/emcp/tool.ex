@@ -4,7 +4,7 @@ defmodule EMCP.Tool do
   @callback name() :: String.t()
   @callback description() :: String.t()
   @callback input_schema() :: map()
-  @callback call(args :: map()) :: map()
+  @callback call(conn :: Plug.Conn.t() | nil, args :: map()) :: map()
 
   def response(content) when is_list(content) do
     %{"content" => content}

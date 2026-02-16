@@ -14,5 +14,5 @@ defmodule EMCP.Resources.TestFile do
   def mime_type, do: "text/plain"
 
   @impl EMCP.Resource
-  def read, do: "Hello from resource!"
+  def read(_conn), do: "Hello from resource!"
 end

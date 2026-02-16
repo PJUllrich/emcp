@@ -11,7 +11,7 @@ defmodule EMCP.Prompts.SimpleGreeting do
   def arguments, do: []
 
   @impl EMCP.Prompt
-  def template(_args) do
+  def template(_conn, _args) do
     %{
       "messages" => [
         %{"role" => "user", "content" => %{"type" => "text", "text" => "Say hello!"}}

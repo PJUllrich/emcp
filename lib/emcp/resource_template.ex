@@ -5,7 +5,8 @@ defmodule EMCP.ResourceTemplate do
   @callback name() :: String.t()
   @callback description() :: String.t()
   @callback mime_type() :: String.t()
-  @callback read(uri :: String.t()) :: {:ok, String.t()} | {:error, String.t()}
+  @callback read(conn :: Plug.Conn.t() | nil, uri :: String.t()) ::
+              {:ok, String.t()} | {:error, String.t()}
 
   def to_map(module) do
     %{

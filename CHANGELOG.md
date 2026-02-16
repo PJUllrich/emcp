@@ -32,5 +32,16 @@
   EMCP.Transport.STDIO.start_link(server: MyApp.MCPServer)
   ```
 
+- `conn` is now passed as the first parameter to all behaviour callbacks that handle requests:
+  - `EMCP.Tool.call/1` is now `call(conn, args)`
+  - `EMCP.Prompt.template/1` is now `template(conn, args)`
+  - `EMCP.Resource.read/0` is now `read(conn)`
+  - `EMCP.ResourceTemplate.read/1` is now `read(conn, uri)`
+  - `EMCP.Server.handle_message/2` is now `handle_message(server, conn, request)`
+
+  The `conn` is the `Plug.Conn` struct when using the HTTP transport, or `nil` when using STDIO.
+
 - `EMCP.Server.new/0` has been removed. Use `EMCP.Server.new/1` or the generated `MyApp.MCPServer.server/0` instead.
+
+
 

@@ -26,7 +26,7 @@ defmodule EMCP.Transport.STDIO do
       line ->
         line
         |> String.trim()
-        |> then(&EMCP.Server.handle_message(server, &1))
+        |> then(&EMCP.Server.handle_message(server, nil, &1))
         |> send_response()
 
         send(self(), :read)
