@@ -204,6 +204,24 @@ Allowed origins can be specified as:
 
 Origin matching is case-insensitive. If you want to allow **all** origins, just set `validate_origin: false` or remove this configuration completely.
 
+## Session management
+
+**By default, StreamableHTTP silently re-creates expired or unknown sessions.**
+
+Your EMCP server might receive unknown sessions for example if you run your app on multiple servers and your load-balancer does not route the client HTTP requests based on the `mcp-session-id` header. If your load-balancer routes an HTTP request to a server that didn't initialize the MCP session, the server would return a `404 - Session not found`.
+
+For stateless HTTP requests (which almost all MCP requests are anyways), it does not matter whether a session is initialized or not. That's why StreamableHTTP recreates such unknown sessions by default, a trade-off that deviates from the MCP spec to provide a better UX.
+
+If you want to follow the MCP spec and return `404` for missing or expired sessions, set `recreate_missing_session: false`. 
+
+```elixir
+forward "/", EMCP.Transport.StreamableHTTP,
+  server: MyApp.MCPServer,
+  recreate_missing_session: false
+```
+
+But be warned that without proper HTTP request routing, this might irritate your user since most LLM clients (e.g. Claude Code) don't recreate expired or unknown MCP sessions during an ongoing conversation and require the user to start a new conversation to reconnect. This is inconvenient to the user who loses the conversation context, but hey! - it's MCP-spec compliant!
+
 ## STDIO Transport
 
 For local development or CLI tools, you can use the STDIO transport instead. It reads JSON-RPC messages from stdin and writes responses to stdout.
@@ -233,6 +251,11 @@ Configure it in Claude Code via `.claude/settings.json`:
 ## Acknowledgements
 
 Based on the official [Ruby MCP SDK](https://github.com/modelcontextprotocol/ruby-sdk) reference implementation.
+
+Inspired by these more complete Elixir implementations:
+
+- [AnubisMCP](https://hexdocs.pm/anubis_mcp/readme.html)
+- [PhantomMCP](https://hexdocs.pm/phantom_mcp/Phantom.html)
 
 ## Development
 

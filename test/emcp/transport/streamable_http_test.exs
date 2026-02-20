@@ -298,6 +298,70 @@ defmodule EMCP.Transport.StreamableHTTPTest do
     end
   end
 
+  describe "recreate_missing_session: false (strict mode)" do
+    defp call_strict(conn) do
+      EMCP.Transport.StreamableHTTP.call(
+        conn,
+        EMCP.Transport.StreamableHTTP.init(server: EMCP.TestServer, recreate_missing_session: false)
+      )
+    end
+
+    defp init_strict_session do
+      conn =
+        post_json("/mcp", %{jsonrpc: "2.0", method: "initialize", id: "init"})
+        |> call_strict()
+
+      session_id = get_resp_header(conn, "mcp-session-id") |> List.first()
+      {conn, session_id}
+    end
+
+    test "returns 404 for unknown session ID" do
+      conn =
+        post_json("/mcp", %{jsonrpc: "2.0", method: "ping", id: "1"},
+          "mcp-session-id": "nonexistent-strict-#{System.unique_integer([:positive])}"
+        )
+        |> call_strict()
+
+      assert conn.status == 404
+      body = JSON.decode!(conn.resp_body)
+      assert body["error"] == "Session not found"
+    end
+
+    test "returns 404 for expired session" do
+      {_init_conn, session_id} = init_strict_session()
+
+      :ets.update_element(
+        EMCP.SessionStore.ETS,
+        session_id,
+        {2, System.monotonic_time(:millisecond) - 700_000}
+      )
+
+      conn =
+        post_json("/mcp", %{jsonrpc: "2.0", method: "ping", id: "1"},
+          "mcp-session-id": session_id
+        )
+        |> call_strict()
+
+      assert conn.status == 404
+      body = JSON.decode!(conn.resp_body)
+      assert body["error"] == "Session expired"
+    end
+
+    test "allows valid session" do
+      {_init_conn, session_id} = init_strict_session()
+
+      conn =
+        post_json("/mcp", %{jsonrpc: "2.0", method: "ping", id: "1"},
+          "mcp-session-id": session_id
+        )
+        |> call_strict()
+
+      assert conn.status == 200
+      body = JSON.decode!(conn.resp_body)
+      assert body["result"] == %{}
+    end
+  end
+
   describe "unsupported methods" do
     test "returns 405 for PUT" do
       conn = conn(:put, "/mcp") |> call()

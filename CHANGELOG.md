@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.2
+
+### Enhancements
+
+- Added `recreate_missing_session` option to `EMCP.Transport.StreamableHTTP`. When set to `false`, the transport returns `404` for unknown or expired session IDs instead of silently re-creating them. Defaults to `true` (existing behaviour).
+
 ## v0.3.1
 
 ### Enhancements

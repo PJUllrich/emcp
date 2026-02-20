@@ -61,7 +61,7 @@ defmodule EMCP.Transport.StreamableHTTP do
     store = get_store(opts)
 
     if accepts_event_stream?(conn) do
-      with_session(conn, store, fn session_id ->
+      with_session(conn, store, opts, fn session_id ->
         store.register(session_id, self())
 
         conn =
@@ -110,7 +110,9 @@ defmodule EMCP.Transport.StreamableHTTP do
         else
           store = get_store(opts)
 
-          with_session(conn, store, fn session_id -> dispatch(conn, request, session_id, opts) end)
+          with_session(conn, store, opts, fn session_id ->
+            dispatch(conn, request, session_id, opts)
+          end)
         end
 
       {:error, message} ->
@@ -152,7 +154,7 @@ defmodule EMCP.Transport.StreamableHTTP do
   defp handle_delete(conn, opts) do
     store = get_store(opts)
 
-    with_session(conn, store, fn session_id ->
+    with_session(conn, store, opts, fn session_id ->
       case store.get_pid(session_id) do
         pid when is_pid(pid) -> send(pid, :close_sse)
         nil -> :ok
@@ -165,9 +167,9 @@ defmodule EMCP.Transport.StreamableHTTP do
 
   # Session helpers
 
-  defp with_session(conn, store, fun) do
+  defp with_session(conn, store, opts, fun) do
     with {:ok, session_id} <- require_session_id(conn),
-         :ok <- validate_session(store, session_id) do
+         :ok <- validate_session(store, session_id, opts) do
       fun.(session_id)
     else
       {:error, status, message} -> json_error(conn, status, message)
@@ -181,22 +183,39 @@ defmodule EMCP.Transport.StreamableHTTP do
     end
   end
 
-  defp validate_session(store, session_id) do
-    case store.lookup(session_id) do
-      nil ->
+  defp validate_session(store, session_id, opts) do
+    recreate? = Keyword.get(opts, :recreate_missing_session, true)
+
+    session = store.lookup(session_id)
+    session_expired? = session_expired?(session)
+
+    cond do
+      session == nil and recreate? ->
         store.store(session_id)
         :ok
 
-      %EMCP.Session{last_seen: last_seen} ->
-        if System.monotonic_time(:millisecond) - last_seen > session_ttl() do
-          store.store(session_id)
-        else
-          store.touch(session_id)
-        end
+      session == nil and not recreate? ->
+        {:error, 404, "Session not found"}
 
+      session_expired? and recreate? ->
+        store.store(session_id)
+        :ok
+
+      session_expired? and not recreate? ->
+        store.delete(session_id)
+        {:error, 404, "Session expired"}
+
+      true ->
+        store.touch(session_id)
         :ok
     end
   end
+
+  defp session_expired?(%EMCP.Session{last_seen: last_seen}) do
+    System.monotonic_time(:millisecond) - last_seen > session_ttl()
+  end
+
+  defp session_expired?(nil), do: true
 
   defp generate_session_id do
     Base.encode16(:crypto.strong_rand_bytes(16), case: :lower)
