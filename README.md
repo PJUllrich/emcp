@@ -186,6 +186,24 @@ end
 
 When a client calls `resources/read`, the server first tries an exact URI match against static resources. If none match, it tries each resource template in order until one handles the URI.
 
+## Origin validation
+
+To prevent DNS rebinding attacks, you can enable origin validation on the transport. When enabled, only requests with an `Origin` header matching the allowed list will be accepted. Requests without an `Origin` header (e.g. from CLI tools) are always allowed.
+
+```elixir
+forward "/", EMCP.Transport.StreamableHTTP,
+  server: MyApp.MCPServer,
+  validate_origin: Mix.env() == :prod,
+  allowed_origins: ["example.com", "staging.example.com"]
+```
+
+Allowed origins can be specified as:
+- An empty list: `[]` - **blocks all incoming requests with an Origin header**
+- Full URLs: `"https://example.com"` — matches the exact scheme and host, plus any port
+- Bare domains: `"example.com"` — matches any scheme (`http` or `https`) and any port
+
+Origin matching is case-insensitive. If you want to allow **all** origins, just set `validate_origin: false` or remove this configuration completely.
+
 ## STDIO Transport
 
 For local development or CLI tools, you can use the STDIO transport instead. It reads JSON-RPC messages from stdin and writes responses to stdout.

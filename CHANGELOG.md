@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.1
+
+### Enhancements
+
+- Added origin validation to `EMCP.Transport.StreamableHTTP` to prevent DNS rebinding attacks. Enable it with `validate_origin: true` and configure `allowed_origins` in the plug opts. It's disabled by default.
+
 ## v0.3.0
 
 ### Breaking Changes

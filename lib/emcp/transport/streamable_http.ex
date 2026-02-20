@@ -7,6 +7,7 @@ defmodule EMCP.Transport.StreamableHTTP do
 
   @default_session_ttl to_timeout(minute: 10)
   @default_keepalive_interval to_timeout(second: 30)
+  @invalid_request -32_600
 
   # Public API
 
@@ -42,10 +43,17 @@ defmodule EMCP.Transport.StreamableHTTP do
   def init(opts), do: opts
 
   @impl Plug
-  def call(%Plug.Conn{method: "GET"} = conn, opts), do: handle_get(conn, opts)
-  def call(%Plug.Conn{method: "POST"} = conn, opts), do: handle_post(conn, opts)
-  def call(%Plug.Conn{method: "DELETE"} = conn, opts), do: handle_delete(conn, opts)
-  def call(conn, _opts), do: json_error(conn, 405, "Method not allowed")
+  def call(conn, opts) do
+    case validate_origin(conn, opts) do
+      :ok -> route_method(conn, opts)
+      {:error, conn} -> conn
+    end
+  end
+
+  defp route_method(%Plug.Conn{method: "GET"} = conn, opts), do: handle_get(conn, opts)
+  defp route_method(%Plug.Conn{method: "POST"} = conn, opts), do: handle_post(conn, opts)
+  defp route_method(%Plug.Conn{method: "DELETE"} = conn, opts), do: handle_delete(conn, opts)
+  defp route_method(conn, _opts), do: json_error(conn, 405, "Method not allowed")
 
   # GET — SSE streaming
 
@@ -256,6 +264,55 @@ defmodule EMCP.Transport.StreamableHTTP do
 
   defp json_error(conn, status, message) do
     json_response(conn, status, %{"error" => message})
+  end
+
+  # Origin validation
+
+  defp validate_origin(conn, opts) do
+    allowed = Keyword.get(opts, :allowed_origins, [])
+    should_validate_origin? = Keyword.get(opts, :validate_origin, false)
+
+    with true <- should_validate_origin?,
+         {:ok, origin} <- get_origin_header(conn),
+         false <- origin_allowed?(origin, allowed) do
+      {:error,
+       json_response(conn, 403, %{
+         "jsonrpc" => "2.0",
+         "error" => %{"code" => @invalid_request, "message" => "Forbidden origin"}
+       })}
+    else
+      _ ->
+        :ok
+    end
+  end
+
+  defp get_origin_header(conn) do
+    case get_req_header(conn, "origin") do
+      [origin] -> {:ok, origin}
+      [] -> :missing_header
+    end
+  end
+
+  @doc false
+  def origin_allowed?(origin, allowed) do
+    case URI.parse(origin) do
+      %URI{scheme: scheme, host: host} when is_binary(scheme) and is_binary(host) ->
+        host =
+          host
+          |> String.trim()
+          |> String.downcase()
+          |> String.trim_trailing(".")
+
+        origin_base = "#{String.downcase(scheme)}://#{host}"
+
+        Enum.any?(allowed, fn entry ->
+          normalized = String.downcase(entry)
+          normalized == origin_base || normalized == origin || normalized == host
+        end)
+
+      _ ->
+        false
+    end
   end
 
   # Config
