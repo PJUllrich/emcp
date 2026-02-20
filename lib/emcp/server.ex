@@ -12,7 +12,7 @@ defmodule EMCP.Server do
   @method_not_found -32601
   @invalid_params -32602
 
-  defstruct [:name, :version, :tools, :prompts, :resources, :resource_templates, :session_store]
+  defstruct [:name, :version, :title, :description, :instructions, :tools, :prompts, :resources, :resource_templates, :session_store]
 
   defmacro __using__(opts) do
     quote do
@@ -26,6 +26,9 @@ defmodule EMCP.Server do
     %Server{
       name: Keyword.fetch!(opts, :name),
       version: Keyword.fetch!(opts, :version),
+      title: Keyword.get(opts, :title),
+      description: Keyword.get(opts, :description),
+      instructions: Keyword.get(opts, :instructions),
       tools: opts |> Keyword.get(:tools, []) |> Map.new(&{&1.name(), &1}),
       prompts: opts |> Keyword.get(:prompts, []) |> Map.new(&{&1.name(), &1}),
       resources: opts |> Keyword.get(:resources, []) |> Map.new(&{&1.uri(), &1}),
@@ -85,23 +88,28 @@ defmodule EMCP.Server do
   ## Handler functions
 
   defp handle_initialize(server, request_id) do
-    result_or_error(
-      request_id,
-      {:ok,
-       %{
-         "protocolVersion" => @protocol_version,
-         "capabilities" => %{
-           "tools" => %{"listChanged" => true},
-           "prompts" => %{"listChanged" => true},
-           "resources" => %{"listChanged" => true}
-         },
-         "serverInfo" => %{
-           "name" => server.name,
-           "version" => server.version
-         }
-       }}
-    )
+    server_info =
+      %{"name" => server.name, "version" => server.version}
+      |> maybe_put("title", server.title)
+      |> maybe_put("description", server.description)
+
+    result =
+      %{
+        "protocolVersion" => @protocol_version,
+        "capabilities" => %{
+          "tools" => %{"listChanged" => true},
+          "prompts" => %{"listChanged" => true},
+          "resources" => %{"listChanged" => true}
+        },
+        "serverInfo" => server_info
+      }
+      |> maybe_put("instructions", server.instructions)
+
+    result_or_error(request_id, {:ok, result})
   end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   defp handle_ping(request_id) do
     result_or_error(request_id, {:ok, %{}})

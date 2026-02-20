@@ -419,18 +419,43 @@ defmodule EMCP.ServerTest do
     end
   end
 
-  describe "initialize capabilities include prompts" do
-    test "reports prompts capability", %{server: server} do
-      request = %{
-        "jsonrpc" => "2.0",
-        "id" => 1,
-        "method" => "initialize",
-        "params" => %{}
-      }
+  describe "initialize" do
+    defp initialize(server) do
+      request = %{"jsonrpc" => "2.0", "id" => 1, "method" => "initialize", "params" => %{}}
+      EMCP.Server.handle_message(server, nil, request)
+    end
 
-      response = EMCP.Server.handle_message(server, nil, request)
+    test "reports capabilities", %{server: server} do
+      response = initialize(server)
       assert %{"result" => %{"capabilities" => capabilities}} = response
+      assert capabilities["tools"] == %{"listChanged" => true}
       assert capabilities["prompts"] == %{"listChanged" => true}
+      assert capabilities["resources"] == %{"listChanged" => true}
+    end
+
+    test "omits title, description and instructions when not set", %{server: server} do
+      response = initialize(server)
+      assert %{"result" => result} = response
+      refute Map.has_key?(result["serverInfo"], "title")
+      refute Map.has_key?(result["serverInfo"], "description")
+      refute Map.has_key?(result, "instructions")
+    end
+
+    test "includes title, description and instructions when set" do
+      server =
+        EMCP.Server.new(
+          name: "test",
+          version: "1.0",
+          title: "My Server",
+          description: "Does things",
+          instructions: "Be helpful."
+        )
+
+      response = initialize(server)
+      assert %{"result" => result} = response
+      assert result["serverInfo"]["title"] == "My Server"
+      assert result["serverInfo"]["description"] == "Does things"
+      assert result["instructions"] == "Be helpful."
     end
   end
 end
