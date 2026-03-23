@@ -1,20 +1,22 @@
 defmodule EMCP.Transport.STDIOTest do
   use ExUnit.Case, async: true
 
-  @server [
-    "-e",
-    "MIX_ENV=test",
-    "--",
-    "mix",
-    "run",
-    "--no-halt",
-    "-e",
-    "EMCP.Transport.STDIO.start_link(server: EMCP.TestServer)"
-  ]
+  defp server_args do
+    [
+      "-e",
+      "MIX_ENV=test",
+      "--",
+      System.find_executable("mix"),
+      "run",
+      "--no-halt",
+      "-e",
+      "EMCP.Transport.STDIO.start_link(server: EMCP.TestServer)"
+    ]
+  end
 
   describe "tools/list" do
     test "returns registered tools" do
-      {output, 0} = MCP.Inspector.run(@server ++ ["--method", "tools/list"])
+      {output, 0} = MCP.Inspector.run(server_args() ++ ["--method", "tools/list"])
 
       result = JSON.decode!(output)
 
@@ -33,7 +35,7 @@ defmodule EMCP.Transport.STDIOTest do
     test "calls a tool and returns the result" do
       {output, 0} =
         MCP.Inspector.run(
-          @server ++
+          server_args() ++
             [
               "--method",
               "tools/call",
@@ -53,7 +55,7 @@ defmodule EMCP.Transport.STDIOTest do
     test "returns an error for invalid argument types" do
       {output, 1} =
         MCP.Inspector.run(
-          @server ++
+          server_args() ++
             [
               "--method",
               "tools/call",
@@ -71,7 +73,7 @@ defmodule EMCP.Transport.STDIOTest do
     test "calls a tool with all JSON schema types" do
       {output, 0} =
         MCP.Inspector.run(
-          @server ++
+          server_args() ++
             [
               "--method",
               "tools/call",

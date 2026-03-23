@@ -33,13 +33,14 @@ defmodule MyApp.MCPServer do
   use EMCP.Server,
     name: "my-app",
     version: "1.0.0",
-    title: "My App",
-    description: "MCP server for My App",
-    instructions: "Use the tools to interact with My App.",
     tools: [MyApp.Tools.Echo],
     prompts: [MyApp.Prompts.CodeReview],
     resources: [MyApp.Resources.Readme],
-    resource_templates: [MyApp.ResourceTemplates.UserProfile]
+    resource_templates: [MyApp.ResourceTemplates.UserProfile],
+    # You can optionally add these meta fields as well:
+    title: "My App",
+    description: "MCP server for My App",
+    instructions: "Use the tools to interact with My App.",
 end
 ```
 
