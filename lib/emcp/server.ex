@@ -12,7 +12,19 @@ defmodule EMCP.Server do
   @method_not_found -32601
   @invalid_params -32602
 
-  defstruct [:name, :version, :title, :description, :instructions, :tools, :prompts, :resources, :resource_templates, :session_store]
+  defstruct [
+    :name,
+    :version,
+    :title,
+    :description,
+    :instructions,
+    :tools,
+    :prompts,
+    :resources,
+    :resource_templates,
+    :session_store,
+    :tool_filter
+  ]
 
   defmacro __using__(opts) do
     quote do
@@ -33,7 +45,8 @@ defmodule EMCP.Server do
       prompts: opts |> Keyword.get(:prompts, []) |> Map.new(&{&1.name(), &1}),
       resources: opts |> Keyword.get(:resources, []) |> Map.new(&{&1.uri(), &1}),
       resource_templates: Keyword.get(opts, :resource_templates, []),
-      session_store: Keyword.get(opts, :session_store, EMCP.SessionStore.ETS)
+      session_store: Keyword.get(opts, :session_store, EMCP.SessionStore.ETS),
+      tool_filter: Keyword.get(opts, :tool_filter)
     }
   end
 
@@ -64,7 +77,7 @@ defmodule EMCP.Server do
     case method do
       "initialize" -> handle_initialize(server, id)
       "ping" -> handle_ping(id)
-      "tools/list" -> handle_list_tools(server, id)
+      "tools/list" -> handle_list_tools(server, conn, id)
       "tools/call" -> handle_call_tool(server, conn, id, request["params"])
       "prompts/list" -> handle_list_prompts(server, id)
       "prompts/get" -> handle_get_prompt(server, conn, id, request["params"])
@@ -115,25 +128,30 @@ defmodule EMCP.Server do
     result_or_error(request_id, {:ok, %{}})
   end
 
-  defp handle_list_tools(server, request_id) do
-    tools = server.tools |> Map.values() |> Enum.map(&EMCP.Tool.to_map/1)
+  defp handle_list_tools(server, conn, request_id) do
+    tools =
+      server.tools
+      |> Map.values()
+      |> apply_tool_filter(server.tool_filter, conn)
+      |> Enum.map(&EMCP.Tool.to_map/1)
+
     result_or_error(request_id, {:ok, %{"tools" => tools}})
   end
 
   defp handle_call_tool(server, conn, request_id, %{"name" => name} = params) do
-    case Map.fetch(server.tools, name) do
-      {:ok, module} ->
-        args = params["arguments"] || %{}
+    with {:ok, module} <- Map.fetch(server.tools, name),
+         true <- tool_visible?(module, server.tool_filter, conn) do
+      args = params["arguments"] || %{}
 
-        case EMCP.Tool.InputSchema.validate(module.input_schema(), args) do
-          :ok ->
-            result_or_error(request_id, {:ok, module.call(conn, args)})
+      case EMCP.Tool.InputSchema.validate(module.input_schema(), args) do
+        :ok ->
+          result_or_error(request_id, {:ok, module.call(conn, args)})
 
-          {:error, message} ->
-            result_or_error(request_id, {:error, @invalid_params, message})
-        end
-
-      :error ->
+        {:error, message} ->
+          result_or_error(request_id, {:error, @invalid_params, message})
+      end
+    else
+      _ ->
         result_or_error(request_id, {:error, @invalid_params, "Tool not found: #{name}"})
     end
   end
@@ -212,4 +230,10 @@ defmodule EMCP.Server do
   defp error_response(id, code, message) do
     %{"jsonrpc" => "2.0", "id" => id, "error" => %{"code" => code, "message" => message}}
   end
+
+  defp apply_tool_filter(tools, nil, _conn), do: tools
+  defp apply_tool_filter(tools, filter, conn), do: Enum.filter(tools, &filter.(conn, &1))
+
+  defp tool_visible?(_module, nil, _conn), do: true
+  defp tool_visible?(module, filter, conn), do: filter.(conn, module)
 end

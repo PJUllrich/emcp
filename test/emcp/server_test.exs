@@ -458,4 +458,87 @@ defmodule EMCP.ServerTest do
       assert result["instructions"] == "Be helpful."
     end
   end
+
+  describe "tool_filter" do
+    setup do
+      # Server with a filter that hides "secret" when conn is nil
+      server =
+        EMCP.Server.new(
+          name: "filter-test",
+          version: "1.0",
+          tools: [EMCP.Tools.Echo, EMCP.Tools.Secret],
+          tool_filter: fn conn, tool ->
+            if is_nil(conn), do: tool.name() != "secret", else: true
+          end
+        )
+
+      {:ok, server: server}
+    end
+
+    defp list_tools(server, conn) do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "tools/list",
+        "params" => %{}
+      }
+
+      EMCP.Server.handle_message(server, conn, request)
+    end
+
+    defp call_tool_with_conn(server, conn, name, args) do
+      request = %{
+        "jsonrpc" => "2.0",
+        "id" => 1,
+        "method" => "tools/call",
+        "params" => %{"name" => name, "arguments" => args}
+      }
+
+      EMCP.Server.handle_message(server, conn, request)
+    end
+
+    test "tools/list omits filtered tools", %{server: server} do
+      response = list_tools(server, nil)
+      assert %{"result" => %{"tools" => tools}} = response
+      names = Enum.map(tools, & &1["name"])
+      assert "echo" in names
+      refute "secret" in names
+    end
+
+    test "tools/list shows all tools when filter passes", %{server: server} do
+      response = list_tools(server, :some_conn)
+      assert %{"result" => %{"tools" => tools}} = response
+      names = Enum.map(tools, & &1["name"])
+      assert "echo" in names
+      assert "secret" in names
+    end
+
+    test "tools/call rejects a filtered-out tool", %{server: server} do
+      response = call_tool_with_conn(server, nil, "secret", %{})
+      assert %{"error" => %{"code" => -32602, "message" => "Tool not found: secret"}} = response
+    end
+
+    test "tools/call allows a visible tool", %{server: server} do
+      response = call_tool_with_conn(server, nil, "echo", %{"message" => "hi"})
+      assert %{"result" => %{"content" => [%{"text" => "hi"}]}} = response
+    end
+
+    test "tools/call allows a filtered tool when conn passes", %{server: server} do
+      response = call_tool_with_conn(server, :some_conn, "secret", %{})
+      assert %{"result" => %{"content" => [%{"text" => "secret data"}]}} = response
+    end
+
+    test "no filter returns all tools" do
+      server =
+        EMCP.Server.new(
+          name: "no-filter",
+          version: "1.0",
+          tools: [EMCP.Tools.Echo, EMCP.Tools.Secret]
+        )
+
+      response = list_tools(server, nil)
+      assert %{"result" => %{"tools" => tools}} = response
+      assert length(tools) == 2
+    end
+  end
 end
