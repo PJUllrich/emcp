@@ -7,6 +7,23 @@ defmodule EMCP.Tool do
   @callback call(conn :: Plug.Conn.t() | nil, args :: map()) :: map()
 
   @doc """
+  Optional hints about a tool's behavior, surfaced to clients via `tools/list`.
+
+  All fields are optional. Recognized keys (per the MCP spec):
+
+    * `:title` / `"title"` — human-readable display name
+    * `:readOnlyHint` / `"readOnlyHint"` — tool does not modify state (default: false)
+    * `:destructiveHint` / `"destructiveHint"` — tool may perform destructive updates (default: true)
+    * `:idempotentHint` / `"idempotentHint"` — repeated identical calls have no additional effect (default: false)
+    * `:openWorldHint` / `"openWorldHint"` — tool interacts with entities outside its local environment (default: true)
+
+  These are hints only — clients should not rely on them for security decisions.
+  """
+  @callback annotations() :: map()
+
+  @optional_callbacks annotations: 0
+
+  @doc """
   Wraps a list of content items into a tool response map.
 
   The MCP protocol supports several content types:
@@ -60,10 +77,16 @@ defmodule EMCP.Tool do
   end
 
   def to_map(module) do
-    %{
+    base = %{
       "name" => module.name(),
       "description" => module.description(),
       "inputSchema" => module.input_schema()
     }
+
+    if function_exported?(module, :annotations, 0) do
+      Map.put(base, "annotations", module.annotations())
+    else
+      base
+    end
   end
 end
